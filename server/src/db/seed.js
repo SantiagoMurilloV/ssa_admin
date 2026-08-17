@@ -19,16 +19,27 @@ const DEMO_PRODUCTS = [
 ];
 
 export async function seed() {
-  const adminEmail = env.seedAdminEmail.toLowerCase();
-  const existingAdmin = await queryOne('SELECT id FROM admin_users WHERE email = $1', [adminEmail]);
-  if (!existingAdmin) {
-    const hash = await bcrypt.hash(env.seedAdminPassword, 12);
-    await query(
-      'INSERT INTO admin_users (email, password_hash, display_name) VALUES ($1, $2, $3)',
-      [adminEmail, hash, 'SSA Import']
-    );
-    console.log(`[seed] admin user created: ${adminEmail}`);
-  }
+  // El panel tiene una sola cuenta y no hay pantalla para cambiarle la clave, así
+  // que SEED_ADMIN_USER / SEED_ADMIN_PASSWORD son la fuente de verdad y se
+  // reconcilian en cada arranque: cambiar la variable y redeployar rota la clave.
+  //
+  // Se borra cualquier otra cuenta porque antes solo se creaba si faltaba: al
+  // cambiar el usuario quedaba la cuenta anterior viva, con su clave vieja
+  // todavía sirviendo para entrar.
+  const adminUser = env.seedAdminUser.toLowerCase();
+  const hash = await bcrypt.hash(env.seedAdminPassword, 12);
+  const { rowCount: removed } = await query('DELETE FROM admin_users WHERE email <> $1', [
+    adminUser
+  ]);
+  const existingAdmin = await queryOne('SELECT id FROM admin_users WHERE email = $1', [adminUser]);
+  await query(
+    `INSERT INTO admin_users (email, password_hash, display_name)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+    [adminUser, hash, 'SSA Import']
+  );
+  if (removed > 0) console.log(`[seed] removed ${removed} stale admin account(s)`);
+  console.log(`[seed] admin ${existingAdmin ? 'credentials reconciled' : 'created'}: ${adminUser}`);
 
   if (!(await SettingsModel.getJson(SETTINGS_KEYS.shippingConfig))) {
     await SettingsModel.setJson(SETTINGS_KEYS.shippingConfig, DEFAULT_SHIPPING_CONFIG);

@@ -17,7 +17,9 @@ export const env = {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
-  seedAdminEmail: process.env.SEED_ADMIN_EMAIL ?? 'admin@ssaimport.co',
+  // Usuario de acceso al panel. No tiene que ser un correo: la columna se sigue
+  // llamando email por compatibilidad con la migración inicial.
+  seedAdminUser: process.env.SEED_ADMIN_USER ?? process.env.SEED_ADMIN_EMAIL ?? 'admin',
   // En producción no hay default: una contraseña conocida en el repo sería
   // acceso libre al panel.
   seedAdminPassword: required('SEED_ADMIN_PASSWORD', isProduction ? undefined : 'ssa-admin-dev'),

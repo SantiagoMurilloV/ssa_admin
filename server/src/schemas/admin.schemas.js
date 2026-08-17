@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
+// El acceso es por usuario, no por correo: puede ser 'admin' o un email.
 export const loginSchema = z
   .object({
-    email: z.string().trim().email().max(160),
+    user: z.string().trim().min(1).max(160),
     password: z.string().min(1).max(200)
   })
   .strict();

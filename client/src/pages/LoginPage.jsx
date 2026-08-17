@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -13,7 +13,7 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await login(email, password);
+      await login(identifier, password);
     } catch (err) {
       setError(err.message ?? 'No se pudo iniciar sesión');
       setBusy(false);
@@ -33,13 +33,15 @@ export default function LoginPage() {
         <p>Panel de administración</p>
         <div className="form-stack">
           <div className="field">
-            <label htmlFor="email">Correo</label>
+            <label htmlFor="user">Usuario</label>
             <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="user"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               autoComplete="username"
+              autoCapitalize="none"
+              spellCheck="false"
               required
             />
           </div>

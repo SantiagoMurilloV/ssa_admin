@@ -17,8 +17,8 @@ export function AuthProvider({ children }) {
       .catch(() => setStatus('anonymous'));
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const { user } = await authApi.login(email, password);
+  const login = useCallback(async (identifier, password) => {
+    const { user } = await authApi.login(identifier, password);
     setUser(user);
     setStatus('authenticated');
   }, []);

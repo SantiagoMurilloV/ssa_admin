@@ -1,7 +1,7 @@
 import { http } from './http.js';
 
 export const authApi = {
-  login: (email, password) => http.post('/auth/login', { email, password }),
+  login: (user, password) => http.post('/auth/login', { user, password }),
   logout: () => http.post('/auth/logout'),
   me: () => http.get('/auth/me')
 };

@@ -6,14 +6,16 @@ import { asyncHandler } from '../middleware/errors.js';
 
 export const AuthController = {
   login: asyncHandler(async (req, res) => {
-    const { email, password } = loginSchema.parse(req.body);
+    const { user: identifier, password } = loginSchema.parse(req.body);
+    // La columna se llama email pero guarda el usuario de acceso, que puede no
+    // serlo (ver seedAdminUser en config/env.js).
     const user = await queryOne(
       'SELECT id, email, password_hash, display_name FROM admin_users WHERE email = $1',
-      [email.toLowerCase()]
+      [identifier.toLowerCase()]
     );
     const valid = user && (await bcrypt.compare(password, user.password_hash));
     if (!valid) {
-      return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
+      return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
     }
     issueSession(res, user);
     res.json({ user: { id: user.id, email: user.email, displayName: user.display_name } });
