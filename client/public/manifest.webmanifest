@@ -1,0 +1,35 @@
+{
+  "name": "SSA Import · Admin",
+  "short_name": "SSA Admin",
+  "description": "Panel de administración de SSA Import: pedidos, productos, contenido y configuración.",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#FAF7F4",
+  "theme_color": "#2A2A35",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "/icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Pedidos", "url": "/pedidos" },
+    { "name": "Productos", "url": "/productos" },
+    { "name": "Encargos", "url": "/encargos" }
+  ]
+}

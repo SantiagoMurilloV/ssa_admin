@@ -14,3 +14,11 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
+// Service worker: lo que hace instalable el panel. Solo en producción, porque en
+// dev interceptaría el HMR de Vite. Si falla, el panel funciona igual.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
