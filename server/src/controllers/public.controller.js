@@ -9,6 +9,7 @@ import { createOrderSchema, createEncargoSchema, subscribeSchema } from '../sche
 import { storageEnabled, uploadImage, deleteImage } from '../config/storage.js';
 import { asyncHandler, HttpError } from '../middleware/errors.js';
 import { notifyNewOrder, notifyNewEncargo } from '../services/push.service.js';
+import { sendReceiptReceived } from '../services/email.service.js';
 import { receiptTokenMatches } from '../utils/order-reference.js';
 import { query } from '../db/pool.js';
 
@@ -202,6 +203,11 @@ export const PublicController = {
     if (previousPublicId && previousPublicId !== uploaded.publicId) {
       await deleteImage(previousPublicId).catch(() => {});
     }
+
+    // "Gracias por tu pedido, tu pago está pendiente por confirmar". Solo en la
+    // primera subida: si el comprador reemplaza el comprobante no le llega otra
+    // vez el mismo correo. Fire-and-forget para no retrasarle la respuesta.
+    if (auth.payment_status === 'awaiting_receipt') sendReceiptReceived(updated);
 
     res.json({
       ok: true,

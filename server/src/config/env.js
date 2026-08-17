@@ -31,6 +31,16 @@ export const env = {
     apiKey: process.env.CLOUDINARY_API_KEY ?? '',
     apiSecret: process.env.CLOUDINARY_API_SECRET ?? ''
   },
+  // Correos transaccionales al comprador (Resend). Sin apiKey no se manda nada
+  // y el resto del API sigue funcionando igual.
+  resend: {
+    apiKey: process.env.RESEND_API_KEY ?? '',
+    // Tiene que ser de un dominio verificado en Resend o la API responde 403.
+    from: process.env.EMAIL_FROM ?? 'SSA Import <no-reply@ssaimport.com>',
+    replyTo: process.env.EMAIL_REPLY_TO ?? '',
+    // Para armar el enlace al estado del pedido en los correos
+    storeUrl: (process.env.STORE_URL ?? 'https://ssaimport.com').replace(/\/+$/, '')
+  },
   vapid: {
     publicKey: process.env.VAPID_PUBLIC_KEY ?? '',
     privateKey: process.env.VAPID_PRIVATE_KEY ?? '',

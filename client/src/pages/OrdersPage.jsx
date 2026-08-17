@@ -247,7 +247,7 @@ export default function OrdersPage() {
           </button>
         ))}
         <input
-          style={{ maxWidth: 240, marginLeft: 'auto' }}
+          className="filter-search"
           placeholder="Buscar por nombre o referencia"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

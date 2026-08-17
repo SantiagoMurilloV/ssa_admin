@@ -181,7 +181,9 @@ export const OrderModel = {
       );
       await client.query('COMMIT');
       const [withItems] = await attachItems([rows[0]]);
-      return withItems;
+      // El estado anterior no se persiste: lo necesita el controlador para no
+      // reenviar el correo de "pago confirmado" si ya estaba en paid.
+      return { ...withItems, previousStatus: previous };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;

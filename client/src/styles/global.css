@@ -184,6 +184,7 @@ textarea { resize: vertical; min-height: 70px; }
 .product-card .photo-grid { margin-top: 12px; }
 
 .filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+.filter-search { max-width: 240px; margin-left: auto; }
 .chip {
   padding: 7px 16px; border-radius: 999px; font-size: 13px;
   border: 1px solid var(--ink-12); background: rgba(255, 255, 255, 0.5); color: var(--ink);
@@ -252,7 +253,52 @@ textarea { resize: vertical; min-height: 70px; }
 .login-card p { color: var(--ink-60); font-size: 14px; margin: 0 0 22px; }
 
 @media (max-width: 760px) {
-  .admin-nav { order: 3; width: 100%; justify-content: space-between; }
-  .admin-nav a { padding: 8px 9px; font-size: 12.5px; }
+  /* En móvil el header pasa a dos filas: identidad y acciones arriba, la
+     navegación abajo. Antes los 6 enlaces envolvían en columna y desbordaban
+     la tarjeta, dejando media nav fuera del área tocable. */
+  .admin-header {
+    flex-wrap: wrap;
+    row-gap: 10px;
+    padding: 10px 12px;
+    top: 8px;
+    margin: 8px 0 20px;
+  }
+  .brand { flex: 1; min-width: 0; }
+
+  .admin-nav {
+    order: 3;
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    /* el scroll horizontal no debe arrastrar la página entera */
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 6px;
+    /* aire a los lados para que el primero y el último no queden pegados */
+    padding: 2px 2px 4px;
+    margin: 0 -2px;
+  }
+  .admin-nav::-webkit-scrollbar { display: none; }
+  .admin-nav a {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    padding: 9px 14px;
+    font-size: 13.5px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid var(--ink-12);
+  }
+  .admin-nav a.active { border-color: var(--ink); }
+
+  /* Objetivos táctiles de 40px: los de 34 quedaban chicos para el pulgar */
+  .bell-btn { width: 40px; height: 40px; }
+  .logout-btn { padding: 10px 16px; }
+
   .field-row { grid-template-columns: 1fr; }
+  .page-title { font-size: 28px; }
+  .view-toggle { margin-left: 0; }
+  .filter-row { gap: 6px; }
+  /* a lo ancho y debajo de los chips, en vez de empujado a la derecha */
+  .filter-search { max-width: none; width: 100%; margin-left: 0; }
 }
