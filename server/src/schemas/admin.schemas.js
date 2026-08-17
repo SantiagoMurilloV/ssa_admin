@@ -21,6 +21,8 @@ export const productSchema = z
     category: z.string().trim().min(2).max(60).default('General'),
     price: z.number().int().min(0),
     inStock: z.boolean().default(true),
+    // null = sin límite de unidades (preventa, reposición constante)
+    stock: z.number().int().min(0).max(100000).nullable().default(null),
     featured: z.boolean().default(false),
     active: z.boolean().default(true)
   })
@@ -28,7 +30,7 @@ export const productSchema = z
 
 export const orderStatusSchema = z
   .object({
-    status: z.enum(['pending', 'paid', 'shipped']),
+    status: z.enum(['pending', 'paid', 'shipped', 'cancelled']),
     shipping: z
       .object({
         type: z.enum(['local', 'carrier']),

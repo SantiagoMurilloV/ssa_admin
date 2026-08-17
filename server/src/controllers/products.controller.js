@@ -40,6 +40,7 @@ export const ProductsController = {
       category: payload.category,
       price: payload.price,
       inStock: payload.inStock,
+      stock: payload.stock,
       featured: payload.featured,
       active: payload.active
     });
@@ -55,6 +56,7 @@ export const ProductsController = {
       category: payload.category,
       price: payload.price,
       inStock: payload.inStock,
+      stock: payload.stock,
       featured: payload.featured,
       active: payload.active
     });

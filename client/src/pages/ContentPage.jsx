@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { contentApi } from '../api/admin.api.js';
 
 // Descripción declarativa de las secciones editables del sitio.
-// type: text | textarea | string-list (una por línea) | object-list
+// type: text | textarea | string-list (una por línea)
 const SECTIONS = [
   {
     key: 'hero',
@@ -27,11 +27,6 @@ const SECTIONS = [
       { path: 'body2', label: 'Párrafo 2', type: 'textarea' },
       { path: 'photoLabel', label: 'Etiqueta del placeholder de foto', type: 'text' }
     ]
-  },
-  {
-    key: 'comoFunciona',
-    title: 'Cómo funciona (3 pasos)',
-    fields: [{ path: 'pasos', label: 'Pasos', type: 'pasos-list' }]
   },
   {
     key: 'destacados',
@@ -115,33 +110,6 @@ function Field({ field, value, onChange }) {
         value={(value ?? []).join('\n')}
         onChange={(e) => onChange(e.target.value.split('\n'))}
       />
-    );
-  }
-  if (field.type === 'pasos-list') {
-    const pasos = value ?? [];
-    return (
-      <div className="form-stack">
-        {pasos.map((paso, i) => (
-          <div className="field-row" key={i}>
-            <input
-              value={paso.titulo ?? ''}
-              placeholder="Título"
-              onChange={(e) => {
-                const next = pasos.map((p, j) => (j === i ? { ...p, titulo: e.target.value } : p));
-                onChange(next);
-              }}
-            />
-            <input
-              value={paso.texto ?? ''}
-              placeholder="Texto"
-              onChange={(e) => {
-                const next = pasos.map((p, j) => (j === i ? { ...p, texto: e.target.value } : p));
-                onChange(next);
-              }}
-            />
-          </div>
-        ))}
-      </div>
     );
   }
   return <input value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;

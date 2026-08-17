@@ -10,6 +10,7 @@ const EMPTY_FORM = {
   description: '',
   category: 'General',
   price: '',
+  stock: '',
   inStock: true,
   featured: false,
   active: true
@@ -24,6 +25,7 @@ function ProductForm({ product, onSaved, onClose }) {
           description: product.description,
           category: product.category,
           price: String(product.price),
+          stock: product.stock === null ? '' : String(product.stock),
           inStock: product.in_stock,
           featured: product.featured,
           active: product.active
@@ -46,6 +48,8 @@ function ProductForm({ product, onSaved, onClose }) {
       description: form.description.trim(),
       category: form.category.trim() || 'General',
       price: Number(form.price),
+      // vacío = sin límite de unidades
+      stock: form.stock.trim() === '' ? null : Number(form.stock),
       inStock: form.inStock,
       featured: form.featured,
       active: form.active
@@ -53,6 +57,9 @@ function ProductForm({ product, onSaved, onClose }) {
     try {
       if (!Number.isInteger(payload.price) || payload.price < 0) {
         throw new Error('El precio debe ser un número entero en pesos');
+      }
+      if (payload.stock !== null && (!Number.isInteger(payload.stock) || payload.stock < 0)) {
+        throw new Error('Las unidades deben ser un número entero (o vacío para ilimitado)');
       }
       if (product) await productsApi.update(product.id, payload);
       else await productsApi.create(payload);
@@ -87,6 +94,21 @@ function ProductForm({ product, onSaved, onClose }) {
             <label>Precio (COP)</label>
             <input type="number" min="0" step="1" value={form.price} onChange={set('price')} required />
           </div>
+        </div>
+        <div className="field">
+          <label>Unidades disponibles</label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={form.stock}
+            onChange={set('stock')}
+            placeholder="Vacío = sin límite"
+          />
+          <small className="muted">
+            Se descuenta al crear cada pedido. En 0 el producto desaparece de la tienda; cancelar un
+            pedido devuelve sus unidades.
+          </small>
         </div>
         <label className="check-row">
           <input type="checkbox" checked={form.inStock} onChange={set('inStock')} />
@@ -213,13 +235,18 @@ export default function ProductsPage() {
           <div className="row-main">
             <div className="row-title">{product.name}</div>
             <div className="row-sub">
-              {product.category} · {formatCOP(product.price)} · {product.detail || 'sin detalle'}
+              {product.category} · {formatCOP(product.price)} ·{' '}
+              {product.stock === null
+                ? 'unidades sin límite'
+                : `${product.stock} ${product.stock === 1 ? 'unidad' : 'unidades'}`}{' '}
+              · {product.detail || 'sin detalle'}
             </div>
           </div>
           <div className="row-actions">
             <span className={`badge ${product.in_stock ? 'badge-stock' : 'badge-preventa'}`}>
               {product.in_stock ? 'En stock' : 'Preventa'}
             </span>
+            {product.stock === 0 && <span className="badge badge-off">Agotado</span>}
             {product.featured && <span className="badge badge-pending">Destacado</span>}
             {!product.active && <span className="badge badge-off">Oculto</span>}
             <button

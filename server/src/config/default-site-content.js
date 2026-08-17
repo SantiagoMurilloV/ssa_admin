@@ -1,6 +1,6 @@
 // Documento de contenido del sitio. Se guarda como JSON en settings['site_content'];
 // el admin edita secciones sueltas y mergeSiteContent completa lo que falte con estos defaults.
-// IMPORTANTE: mantener sincronizado con ssa_store/server/src/config/default-site-content.js
+// ESPEJO de ssa_store/server/src/config/default-site-content.js — si cambias uno, cambia el otro.
 export const LAYOUT_SECTION_KEYS = ['quienesSomos', 'destacados', 'encargos', 'newsletter'];
 export const IMAGE_SECTIONS = ['quienesSomos'];
 
@@ -10,7 +10,7 @@ export const DEFAULT_SITE_CONTENT = {
     titleLines: ['Tus favoritos de EE. UU.', 'más cerca de ti'],
     lead: 'Compramos por ti en EE. UU. y te lo entregamos en tu puerta: original y sin vueltas.',
     ctaPrimary: 'Ver catálogo',
-    ctaSecondary: 'Cómo funciona'
+    ctaSecondary: 'Quiénes somos'
   },
   quienesSomos: {
     eyebrow: 'Quiénes somos',
@@ -20,22 +20,6 @@ export const DEFAULT_SITE_CONTENT = {
       'Compramos directo en tiendas oficiales de Estados Unidos: lanzamientos, básicos de farmacia y esas referencias que aquí llegan al doble. Todo original, con factura.',
     body2: 'Cada referencia tiene pocas unidades: si algo te gusta, apártalo.',
     photoLabel: 'foto editorial · bodega SSA, Miami'
-  },
-  comoFunciona: {
-    pasos: [
-      {
-        titulo: 'Elige tu pieza',
-        texto: 'Explora el catálogo o encárganos lo que no encuentres: todo original, directo de EE. UU.'
-      },
-      {
-        titulo: 'Confirmamos el pedido',
-        texto: 'Transfieres a uno de nuestros canales, subes el comprobante y verificamos tu pago. Sin sorpresas.'
-      },
-      {
-        titulo: 'Llega a tu puerta',
-        texto: 'En stock: envío inmediato. Preventa: máximo 15 días hábiles a cualquier ciudad del país.'
-      }
-    ]
   },
   destacados: {
     title: 'Destacados',

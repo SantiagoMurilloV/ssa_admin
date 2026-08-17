@@ -4,7 +4,12 @@ import { useApiResource } from '../hooks/useApiResource.js';
 import { formatCOP, formatDate } from '../utils/format.js';
 import Modal from '../components/ui/Modal.jsx';
 
-const STATUS_LABEL = { pending: 'Pendiente', paid: 'Pago verificado', shipped: 'Enviado' };
+const STATUS_LABEL = {
+  pending: 'Pendiente',
+  paid: 'Pago verificado',
+  shipped: 'Enviado',
+  cancelled: 'Cancelado'
+};
 const PAYMENT_LABEL = {
   awaiting_receipt: 'Sin comprobante',
   in_review: 'Comprobante por revisar',
@@ -91,7 +96,7 @@ function ShipModal({ order, onConfirm, onClose }) {
   );
 }
 
-function OrderCard({ order, onVerify, onShip, onRevert, onViewReceipt }) {
+function OrderCard({ order, onVerify, onShip, onRevert, onCancel, onViewReceipt }) {
   return (
     <article className="row-card">
       <div className="row-main">
@@ -143,6 +148,11 @@ function OrderCard({ order, onVerify, onShip, onRevert, onViewReceipt }) {
             Volver a pendiente
           </button>
         )}
+        {order.status !== 'cancelled' && (
+          <button className="btn btn-danger btn-sm" onClick={() => onCancel(order)}>
+            Cancelar
+          </button>
+        )}
       </div>
     </article>
   );
@@ -181,17 +191,37 @@ export default function OrdersPage() {
     }
   };
 
+  // Cancelar devuelve al inventario las unidades que este pedido retenía
+  const cancel = async (order) => {
+    const units = order.items.map((i) => `${i.quantity}× ${i.product_name}`).join(', ');
+    if (
+      !window.confirm(
+        `¿Cancelar ${order.reference}? Se devuelven al inventario: ${units}.`
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    try {
+      await ordersApi.updateStatus(order.id, { status: 'cancelled' });
+      reload({ silent: true });
+    } catch (err) {
+      setActionError(`No se pudo cancelar ${order.reference}: ${err.message}`);
+    }
+  };
+
   const ship = async (order, shipping) => {
     await ordersApi.updateStatus(order.id, { status: 'shipped', shipping });
     setShipOrder(null);
     reload({ silent: true });
   };
 
-  const counts = data?.counts ?? { pending: 0, paid: 0, shipped: 0 };
+  const counts = data?.counts ?? { pending: 0, paid: 0, shipped: 0, cancelled: 0 };
   const filters = [
     ['pending', `Pendientes (${counts.pending})`],
     ['paid', `Pagados (${counts.paid})`],
     ['shipped', `Enviados (${counts.shipped})`],
+    ['cancelled', `Cancelados (${counts.cancelled})`],
     ['all', 'Todos']
   ];
 
@@ -236,6 +266,7 @@ export default function OrdersPage() {
           onVerify={verify}
           onShip={setShipOrder}
           onRevert={revert}
+          onCancel={cancel}
           onViewReceipt={setReceiptOrder}
         />
       ))}

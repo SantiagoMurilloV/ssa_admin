@@ -1,5 +1,6 @@
 import { pool, query, queryOne } from '../db/pool.js';
 import { generateOrderReference, generateReceiptToken } from '../utils/order-reference.js';
+import { ProductModel, InsufficientStockError } from './product.model.js';
 
 // receipt_token queda fuera: es una credencial y nunca debe viajar al panel
 // ni a los listados. Solo se lee explícitamente en findTokenByReference.
@@ -65,6 +66,9 @@ export const OrderModel = {
               [created.id, item.productId, item.productName, item.unitPrice, item.quantity]
             );
           }
+          // El inventario se retiene en la misma transacción que el pedido: si
+          // no alcanza, no queda ni pedido a medias ni stock descontado.
+          await ProductModel.takeStockForItems(client, items);
           await client.query('COMMIT');
           const [withItems] = await attachItems([created]);
           return withItems;
@@ -92,7 +96,7 @@ export const OrderModel = {
 
   async counts() {
     const { rows } = await query('SELECT status, COUNT(*)::int AS count FROM orders GROUP BY status');
-    const counts = { pending: 0, paid: 0, shipped: 0 };
+    const counts = { pending: 0, paid: 0, shipped: 0, cancelled: 0 };
     for (const row of rows) counts[row.status] = row.count;
     return counts;
   },
@@ -120,40 +124,70 @@ export const OrderModel = {
   },
 
   async updateStatus(id, { status, shipping }) {
-    // Volver a 'pending' debe deshacer también la verificación del pago: si no,
-    // el pedido queda "pendiente pero verificado" y el cliente ya no puede
-    // volver a subir su comprobante (recibiría 409 para siempre).
-    const row = await queryOne(
-      `UPDATE orders SET
-         status = $2,
-         payment_status = CASE
-           WHEN $2 = 'pending' THEN
-             CASE WHEN receipt_url IS NOT NULL THEN 'in_review' ELSE 'awaiting_receipt' END
-           ELSE 'verified'
-         END,
-         paid_at = CASE
-           WHEN $2 = 'pending' THEN NULL
-           WHEN paid_at IS NULL THEN now()
-           ELSE paid_at
-         END,
-         shipping_type = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($3, shipping_type) END,
-         tracking_carrier = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($4, tracking_carrier) END,
-         tracking_number = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($5, tracking_number) END,
-         tracking_url = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($6, tracking_url) END
-       WHERE id = $1
-       RETURNING ${ORDER_FIELDS}`,
-      [
-        id,
-        status,
-        shipping?.type ?? null,
-        shipping?.carrier ?? null,
-        shipping?.trackingNumber ?? null,
-        shipping?.trackingUrl ?? null
-      ]
-    );
-    if (!row) return null;
-    const [withItems] = await attachItems([row]);
-    return withItems;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // FOR UPDATE serializa dos cambios de estado sobre el mismo pedido: sin
+      // esto, cancelar dos veces devolvería el inventario dos veces.
+      const before = await client.query('SELECT status FROM orders WHERE id = $1 FOR UPDATE', [id]);
+      if (before.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const previous = before.rows[0].status;
+
+      // Solo el cruce de la frontera 'cancelled' mueve inventario, y solo una vez
+      if (status === 'cancelled' && previous !== 'cancelled') {
+        await ProductModel.releaseStockForOrder(client, id);
+      } else if (status !== 'cancelled' && previous === 'cancelled') {
+        // Puede lanzar InsufficientStockError: reactivar un pedido cuyas
+        // unidades ya se vendieron a otro no debe sobrevender.
+        await ProductModel.takeStockForOrder(client, id);
+      }
+
+      // Volver a 'pending' debe deshacer también la verificación del pago: si no,
+      // el pedido queda "pendiente pero verificado" y el cliente ya no puede
+      // volver a subir su comprobante (recibiría 409 para siempre).
+      // 'cancelled' no toca el pago: el pedido está muerto, no verificado.
+      const { rows } = await client.query(
+        `UPDATE orders SET
+           status = $2,
+           payment_status = CASE
+             WHEN $2 = 'cancelled' THEN payment_status
+             WHEN $2 = 'pending' THEN
+               CASE WHEN receipt_url IS NOT NULL THEN 'in_review' ELSE 'awaiting_receipt' END
+             ELSE 'verified'
+           END,
+           paid_at = CASE
+             WHEN $2 = 'cancelled' THEN paid_at
+             WHEN $2 = 'pending' THEN NULL
+             WHEN paid_at IS NULL THEN now()
+             ELSE paid_at
+           END,
+           shipping_type = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($3, shipping_type) END,
+           tracking_carrier = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($4, tracking_carrier) END,
+           tracking_number = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($5, tracking_number) END,
+           tracking_url = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($6, tracking_url) END
+         WHERE id = $1
+         RETURNING ${ORDER_FIELDS}`,
+        [
+          id,
+          status,
+          shipping?.type ?? null,
+          shipping?.carrier ?? null,
+          shipping?.trackingNumber ?? null,
+          shipping?.trackingUrl ?? null
+        ]
+      );
+      await client.query('COMMIT');
+      const [withItems] = await attachItems([rows[0]]);
+      return withItems;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   },
 
   // Adjunta el comprobante solo si el pedido sigue esperándolo. La condición

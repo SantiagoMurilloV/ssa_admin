@@ -1,4 +1,4 @@
-import { ProductModel } from '../models/product.model.js';
+import { ProductModel, InsufficientStockError } from '../models/product.model.js';
 import { OrderModel } from '../models/order.model.js';
 import { EncargoModel } from '../models/encargo.model.js';
 import { PromotionModel, discountedPrice } from '../models/promotion.model.js';
@@ -28,10 +28,15 @@ const publicProduct = (product, promotion) => ({
   currency: product.currency,
   inStock: product.in_stock,
   featured: product.featured,
+  // null = sin límite. Se expone para poder avisar "últimas N unidades".
+  stock: product.stock,
   basePrice: product.price,
   price: discountedPrice(product.price, promotion),
   photos: product.photos.map(publicPhoto)
 });
+
+// Agotado: el producto sigue existiendo en el admin pero la tienda no lo ofrece
+const isSoldOut = (product) => product.stock !== null && product.stock <= 0;
 
 const loadShippingConfig = async () =>
   normalizeShippingConfig(await SettingsModel.getJson(SETTINGS_KEYS.shippingConfig));
@@ -47,7 +52,9 @@ export const PublicController = {
       loadShippingConfig(),
       loadPaymentChannels()
     ]);
-    const publicProducts = products.map((p) => publicProduct(p, promotion));
+    const publicProducts = products
+      .map((p) => publicProduct(p, promotion))
+      .filter((p) => !isSoldOut(p));
     const categories = [...new Set(publicProducts.map((p) => p.category))];
     res.json({
       products: publicProducts,
@@ -99,23 +106,46 @@ export const PublicController = {
     const activeChannels = publicPaymentChannels(channels);
     const channel = activeChannels.find((ch) => ch.id === payload.paymentChannelId) ?? null;
 
-    const order = await OrderModel.create(
-      {
-        customerName: payload.customer.fullName,
-        phone: payload.customer.phone,
-        email: payload.customer.email,
-        department: payload.shipping.department,
-        city: payload.shipping.city,
-        address: payload.shipping.address,
-        notes: payload.shipping.notes,
-        paymentChannel: channel ? channel.label : null,
-        quantity,
-        subtotal,
-        shippingFee,
-        total
-      },
-      items
-    );
+    let order;
+    try {
+      order = await OrderModel.create(
+        {
+          customerName: payload.customer.fullName,
+          phone: payload.customer.phone,
+          email: payload.customer.email,
+          department: payload.shipping.department,
+          city: payload.shipping.city,
+          address: payload.shipping.address,
+          notes: payload.shipping.notes,
+          paymentChannel: channel ? channel.label : null,
+          quantity,
+          subtotal,
+          shippingFee,
+          total
+        },
+        items
+      );
+    } catch (error) {
+      // Otro comprador se llevó las unidades mientras este llenaba el checkout.
+      // 409 con el detalle por producto para que la tienda pueda decir cuántas
+      // quedan y el comprador ajuste su carrito.
+      if (error instanceof InsufficientStockError) {
+        throw new HttpError(
+          409,
+          'Se agotaron unidades mientras completabas el pedido',
+          error.shortages.map((s) => ({
+            field: 'items',
+            productId: s.productId,
+            available: s.available,
+            message:
+              s.available === 0
+                ? `${s.productName} se agotó`
+                : `De ${s.productName} solo ${s.available === 1 ? 'queda 1 unidad' : `quedan ${s.available} unidades`}`
+          }))
+        );
+      }
+      throw error;
+    }
 
     // El pedido por transferencia cuenta como purchase al crearse
     await query('INSERT INTO events (type) VALUES ($1)', ['purchase']);

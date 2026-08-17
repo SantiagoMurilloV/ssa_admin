@@ -105,9 +105,40 @@ status:         pending ──► paid ──► shipped
                    ▲          │         │
                    └──────────┴─────────┘   "Volver a pendiente" en el panel
 
+                pending / paid / shipped ──► cancelled
+                                             devuelve el inventario retenido
+
 payment_status: awaiting_receipt ──► in_review ──► verified
                 (sin comprobante)   (subió foto)   (admin confirmó)
 ```
+
+`cancelled` no toca `payment_status` ni `paid_at`: el pedido está muerto, no verificado.
+
+### Inventario
+
+`products.stock` cuenta unidades. **`NULL` = sin límite** (preventa, o lo que se
+repone siempre); es el valor de todo lo que existía antes de la migración `003`.
+
+Las unidades se **retienen al crear el pedido**, no al confirmar el pago. Aquí no
+hay pasarela, así que si esperáramos a la verificación manual la misma última
+unidad se le prometería a varios compradores a la vez. El costo de esa decisión es
+que un pedido que nunca se paga retiene stock hasta que lo canceles.
+
+- El descuento va en el mismo `UPDATE` que la condición
+  (`WHERE stock IS NULL OR stock >= $qty`), dentro de la transacción que crea el
+  pedido: dos pedidos simultáneos por la última unidad se serializan en el row
+  lock, uno gana y el otro recibe **409** con cuántas quedan.
+- Con `stock = 0` el producto desaparece de `/public/catalog`, pero sigue en el
+  panel. No se borra ni se desactiva solo.
+- **Cancelar** devuelve las unidades. Solo el cruce de la frontera `cancelled`
+  mueve inventario, y `SELECT ... FOR UPDATE` garantiza que cancelar dos veces no
+  lo devuelva dos veces. Sacar un pedido de `cancelled` vuelve a retenerlo, y
+  falla con 409 si en el entretanto se vendieron a otro.
+- El `CHECK (stock IS NULL OR stock >= 0)` es la última línea: ni un `UPDATE` a
+  mano puede dejar stock negativo.
+
+La lógica vive en SQL, así que se prueba contra una base de verdad
+(`server/test/stock.test.js`, ver [Tests](#tests)).
 
 ## Páginas del panel
 
@@ -140,3 +171,23 @@ Deben mantenerse sincronizados a mano con el repo de la tienda
 | `server/src/config/default-site-content.js` | `server/src/config/default-site-content.js` |
 | `server/src/schemas/public.schemas.js` (createOrderSchema) | `server/src/schemas/order.schema.js` |
 | `server/src/config/shipping-config.js` (resolveShippingFee) | `client/src/utils/shipping.js` |
+
+## Tests
+
+```bash
+npm test            # 40 tests, sin base de datos
+```
+
+Cubren la regla de envíos, los canales de pago, el merge de contenido, el schema
+del pedido y que los archivos espejo no se desincronicen.
+
+Los 9 tests de inventario necesitan Postgres y **borran productos y pedidos**, así
+que se omiten salvo que los apuntes a propósito a una base desechable:
+
+```bash
+createdb ssa_stock_test
+STOCK_TEST_DATABASE_URL=postgres://localhost:5432/ssa_stock_test npm test   # 49
+```
+
+Recrean el esquema desde las migraciones, así que también comprueban que
+`001 → 002 → 003` aplican en orden sobre una base vacía.

@@ -51,7 +51,7 @@ export const StatsController = {
     const funnel = { page_view: 0, product_view: 0, add_to_cart: 0, purchase: 0 };
     for (const row of funnelRows.rows) funnel[row.type] = row.count;
 
-    const counts = { pending: 0, paid: 0, shipped: 0 };
+    const counts = { pending: 0, paid: 0, shipped: 0, cancelled: 0 };
     for (const row of orderCounts.rows) counts[row.status] = row.count;
 
     res.json({
