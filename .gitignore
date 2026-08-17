@@ -1,7 +1,8 @@
 node_modules/
 dist/
-.env
-.env.local
 .DS_Store
 *.log
 uploads/
+.vercel/
+# .env.local lo genera `vercel link` y trae un token OIDC
+.env*
