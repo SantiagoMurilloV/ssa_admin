@@ -44,6 +44,12 @@ export const encargosApi = {
   updateStatus: (id, status) => http.patch(`/encargos/${id}/status`, { status })
 };
 
+export const pushApi = {
+  config: () => http.get('/push/config'),
+  subscribe: (subscription) => http.post('/push/subscriptions', subscription),
+  unsubscribe: (endpoint) => http.delete('/push/subscriptions', { endpoint })
+};
+
 export const promotionsApi = {
   list: () => http.get('/promotions'),
   create: (promotion) => http.post('/promotions', promotion),

@@ -1,5 +1,37 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { usePushNotifications } from '../../hooks/usePushNotifications.js';
+
+const BELL_LABEL = {
+  loading: 'Notificaciones…',
+  unsupported: 'Este navegador no admite notificaciones',
+  unavailable: 'Notificaciones no configuradas en el servidor',
+  denied: 'Notificaciones bloqueadas en el navegador',
+  off: 'Activar notificaciones de pedidos y encargos',
+  on: 'Notificaciones activas · clic para desactivar'
+};
+
+function NotificationsToggle() {
+  const { state, error, busy, enable, disable } = usePushNotifications();
+  if (state === 'unsupported') return null;
+
+  const inactive = state === 'loading' || state === 'unavailable' || state === 'denied';
+  return (
+    <button
+      className={`bell-btn ${state === 'on' ? 'is-on' : ''}`}
+      title={error ?? BELL_LABEL[state]}
+      aria-label={error ?? BELL_LABEL[state]}
+      disabled={busy || inactive}
+      onClick={() => (state === 'on' ? disable() : enable())}
+    >
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M10.3 19a2 2 0 0 0 3.4 0" strokeLinecap="round" />
+        {state !== 'on' && <path d="M4 4l16 16" strokeLinecap="round" />}
+      </svg>
+    </button>
+  );
+}
 
 const LINKS = [
   { to: '/', label: 'Inicio', end: true },
@@ -34,6 +66,7 @@ export default function AdminHeader({ pendingCount }) {
           </NavLink>
         ))}
       </nav>
+      <NotificationsToggle />
       <button className="logout-btn" onClick={logout}>Salir</button>
     </header>
   );

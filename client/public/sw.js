@@ -1,5 +1,5 @@
 // Service worker del panel. Sube CACHE_VERSION para invalidar todo lo viejo.
-const CACHE_VERSION = 'ssa-admin-v1';
+const CACHE_VERSION = 'ssa-admin-v2';
 const SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -20,6 +20,47 @@ self.addEventListener('activate', (event) => {
         Promise.all(keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key)))
       )
       .then(() => self.clients.claim())
+  );
+});
+
+// ── Notificaciones de pedidos y encargos ──
+// El servidor manda {title, body, url}. Sin este handler la suscripción existe
+// pero no aparece nada: el push llega y se descarta.
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : '' };
+  }
+  const url = payload.url ?? '/';
+  event.waitUntil(
+    self.registration.showNotification(payload.title ?? 'SSA Import', {
+      body: payload.body ?? '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: { url },
+      // Un tag por destino: varios pedidos seguidos se agrupan en vez de
+      // apilar una notificación por cada uno.
+      tag: url,
+      renotify: true
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = event.notification.data?.url ?? '/';
+  // Si el panel ya está abierto se reutiliza esa pestaña en vez de abrir otra
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (new URL(client.url).origin === self.location.origin) {
+          return client.focus().then((focused) => focused.navigate(target));
+        }
+      }
+      return self.clients.openWindow(target);
+    })
   );
 });
 
