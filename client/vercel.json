@@ -4,7 +4,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://CAMBIA-POR-TU-DOMINIO-RAILWAY.up.railway.app/api/:path*"
+      "destination": "https://ssa-admin-api-production.up.railway.app/api/:path*"
     },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
