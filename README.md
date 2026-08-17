@@ -3,8 +3,12 @@
 Panel de administración y **única fuente de verdad** de la tienda: catálogo,
 contenido del sitio, pedidos, canales de pago, envíos, promociones y encargos.
 
-La tienda (`ssa_store`) nunca toca la base de datos: consume este API a través de
-sus funciones serverless.
+La tienda nunca toca la base de datos: consume este API a través de sus funciones
+serverless.
+
+> Repo de la tienda:
+> [`SantiagoMurilloV/ssa_import`](https://github.com/SantiagoMurilloV/ssa_import)
+> (en local, la carpeta `ssa_store`).
 
 ## Stack
 
@@ -128,9 +132,10 @@ cookie de sesión es first-party y Safari no la bloquea.
 
 ## Archivos espejo
 
-Deben mantenerse sincronizados a mano con `ssa_store`:
+Deben mantenerse sincronizados a mano con el repo de la tienda
+(`ssa_import`, carpeta local `ssa_store`). `npm test` falla si se desincronizan:
 
-| Este repo | ssa_store |
+| Este repo | tienda |
 |---|---|
 | `server/src/config/default-site-content.js` | `server/src/config/default-site-content.js` |
 | `server/src/schemas/public.schemas.js` (createOrderSchema) | `server/src/schemas/order.schema.js` |
