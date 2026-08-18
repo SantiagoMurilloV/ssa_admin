@@ -318,3 +318,30 @@ textarea { resize: vertical; min-height: 70px; }
   /* a lo ancho y debajo de los chips, en vez de empujado a la derecha */
   .filter-search { max-width: none; width: 100%; margin-left: 0; }
 }
+
+/* ── Variantes en el panel ── */
+.expanded-panel { width: 100%; }
+.variants-box { width: 100%; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--ink-12); }
+.variants-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13.5px; }
+.option-rows { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.option-row { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(160px, 2.4fr) auto; gap: 8px; width: 100%; }
+.variants-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 4px; }
+.variant-table { margin-top: 12px; }
+.variant-row {
+  display: grid; grid-template-columns: minmax(120px, 2fr) 90px 110px 90px auto;
+  gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(42, 42, 53, 0.06);
+}
+.variant-row-head { font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-45); border-bottom-color: var(--ink-12); }
+.variant-row.is-off { opacity: 0.55; }
+.variant-label { font-size: 13.5px; }
+.variant-label em { font-style: normal; color: var(--ink-45); font-size: 12px; }
+.variant-row-actions { display: flex; gap: 6px; }
+@media (max-width: 760px) {
+  .option-row { grid-template-columns: 1fr auto; }
+  .option-row input:first-child { grid-column: 1 / -1; }
+  /* la grilla de 5 columnas no cabe en un teléfono: cada variante pasa a bloque */
+  .variant-row { grid-template-columns: 1fr 1fr; row-gap: 6px; padding: 10px 0; }
+  .variant-row-head { display: none; }
+  .variant-label { grid-column: 1 / -1; font-weight: 500; }
+  .variant-row-actions { grid-column: 1 / -1; }
+}

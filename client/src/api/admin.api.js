@@ -21,6 +21,12 @@ export const productsApi = {
   create: (product) => http.post('/products', product),
   update: (id, product) => http.put(`/products/${id}`, product),
   remove: (id) => http.delete(`/products/${id}`),
+  setOptions: (id, options) => http.put(`/products/${id}/options`, { options }),
+  listVariants: (id) => http.get(`/products/${id}/variants`),
+  addVariant: (id, variant) => http.post(`/products/${id}/variants`, variant),
+  updateVariant: (id, variantId, variant) =>
+    http.put(`/products/${id}/variants/${variantId}`, variant),
+  removeVariant: (id, variantId) => http.delete(`/products/${id}/variants/${variantId}`),
   addPhoto: (id, formData) => http.upload(`/products/${id}/photos`, formData),
   removePhoto: (id, photoId) => http.delete(`/products/${id}/photos/${photoId}`)
 };

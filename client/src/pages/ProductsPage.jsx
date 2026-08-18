@@ -3,6 +3,7 @@ import { productsApi } from '../api/admin.api.js';
 import { useApiResource } from '../hooks/useApiResource.js';
 import { formatCOP } from '../utils/format.js';
 import Modal from '../components/ui/Modal.jsx';
+import VariantsManager from '../components/products/VariantsManager.jsx';
 
 const EMPTY_FORM = {
   name: '',
@@ -217,13 +218,22 @@ function PhotoManager({ product, onChanged }) {
   );
 }
 
+// Con opciones manda el inventario de las variantes; sin ellas, el del producto
+const isSoldOut = (product) => {
+  const variants = product.variants ?? [];
+  if (variants.length > 0) {
+    return variants.every((v) => v.active === false || (v.stock !== null && v.stock <= 0));
+  }
+  return product.stock === 0;
+};
+
 function ProductBadges({ product }) {
   return (
     <>
       <span className={`badge ${product.in_stock ? 'badge-stock' : 'badge-preventa'}`}>
         {product.in_stock ? 'En stock' : 'Preventa'}
       </span>
-      {product.stock === 0 && <span className="badge badge-off">Agotado</span>}
+      {isSoldOut(product) && <span className="badge badge-off">Agotado</span>}
       {product.featured && <span className="badge badge-pending">Destacado</span>}
       {!product.active && <span className="badge badge-off">Oculto</span>}
     </>
@@ -234,7 +244,8 @@ function ProductActions({ product, expanded, onTogglePhotos, onEdit, onRemove })
   return (
     <>
       <button className="btn btn-ghost btn-sm" onClick={onTogglePhotos}>
-        {expanded ? 'Cerrar' : 'Medios'} ({product.photos.length})
+        {expanded ? 'Cerrar' : 'Medios y variantes'} ({product.photos.length}
+        {(product.variants ?? []).length > 0 ? ` · ${product.variants.length}v` : ''})
       </button>
       <button className="btn btn-ghost btn-sm" onClick={onEdit}>Editar</button>
       <button className="btn btn-danger btn-sm" onClick={onRemove}>Eliminar</button>
@@ -242,14 +253,20 @@ function ProductActions({ product, expanded, onTogglePhotos, onEdit, onRemove })
   );
 }
 
+const stockLabel = (product) => {
+  const variants = product.variants ?? [];
+  // Con variantes el inventario del producto no se usa: manda la suma de ellas
+  if (variants.length > 0) {
+    const total = variants.reduce((sum, v) => (v.stock === null ? sum : sum + v.stock), 0);
+    return `${variants.length} variantes · ${total} unidades`;
+  }
+  return product.stock === null
+    ? 'unidades sin límite'
+    : `${product.stock} ${product.stock === 1 ? 'unidad' : 'unidades'}`;
+};
+
 const productMeta = (product) =>
-  [
-    product.category,
-    formatCOP(product.price),
-    product.stock === null
-      ? 'unidades sin límite'
-      : `${product.stock} ${product.stock === 1 ? 'unidad' : 'unidades'}`
-  ].join(' · ');
+  [product.category, formatCOP(product.price), stockLabel(product)].join(' · ');
 
 function ProductThumb({ product, className }) {
   const media = product.photos[0];
@@ -348,7 +365,10 @@ export default function ProductsPage() {
               />
             </div>
             {expanded === product.id && (
-              <PhotoManager product={product} onChanged={() => reload({ silent: true })} />
+              <div className="expanded-panel">
+                <PhotoManager product={product} onChanged={() => reload({ silent: true })} />
+                <VariantsManager product={product} onChanged={() => reload({ silent: true })} />
+              </div>
             )}
           </article>
         ))}
@@ -380,7 +400,10 @@ export default function ProductsPage() {
                   />
                 </div>
                 {expanded === product.id && (
-                  <PhotoManager product={product} onChanged={() => reload({ silent: true })} />
+                  <div className="expanded-panel">
+                    <PhotoManager product={product} onChanged={() => reload({ silent: true })} />
+                    <VariantsManager product={product} onChanged={() => reload({ silent: true })} />
+                  </div>
                 )}
               </div>
             </article>
