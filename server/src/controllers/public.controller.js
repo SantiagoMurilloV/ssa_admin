@@ -33,11 +33,38 @@ const publicProduct = (product, promotion) => ({
   stock: product.stock,
   basePrice: product.price,
   price: discountedPrice(product.price, promotion),
-  photos: product.photos.map(publicPhoto)
+  photos: product.photos.map(publicPhoto),
+  options: (product.options ?? []).map((option) => ({
+    name: option.name,
+    values: option.option_values
+  })),
+  // Solo variantes activas y con stock: si un aroma se agotó, la tienda no debe
+  // ni ofrecerlo en el selector.
+  variants: (product.variants ?? [])
+    .filter((variant) => variant.active && !isVariantSoldOut(variant))
+    .map((variant) => ({
+      id: variant.id,
+      options: variant.options,
+      label: variant.label,
+      stock: variant.stock,
+      photoId: variant.photo_id,
+      // price null hereda el del producto, con el descuento vigente aplicado
+      basePrice: variant.price ?? product.price,
+      price: discountedPrice(variant.price ?? product.price, promotion)
+    }))
 });
 
-// Agotado: el producto sigue existiendo en el admin pero la tienda no lo ofrece
-const isSoldOut = (product) => product.stock !== null && product.stock <= 0;
+const isVariantSoldOut = (variant) => variant.stock !== null && variant.stock <= 0;
+
+// Agotado: el producto sigue existiendo en el admin pero la tienda no lo ofrece.
+// Si tiene opciones configuradas manda el inventario de las variantes, y como
+// publicProduct ya descartó las agotadas, quedarse sin ninguna significa que no
+// hay nada que vender. Se mira options y no variants porque la lista filtrada
+// llega vacía tanto si nunca tuvo variantes como si todas se agotaron.
+const isSoldOut = (product) =>
+  product.options.length > 0
+    ? product.variants.length === 0
+    : product.stock !== null && product.stock <= 0;
 
 const loadShippingConfig = async () =>
   normalizeShippingConfig(await SettingsModel.getJson(SETTINGS_KEYS.shippingConfig));
@@ -83,7 +110,8 @@ export const PublicController = {
     ]);
     const byId = new Map(products.map((p) => [p.id, p]));
 
-    // El precio SIEMPRE se recalcula server-side: el cliente solo dicta qué y cuánto
+    // El precio SIEMPRE se recalcula server-side: el cliente solo dicta qué,
+    // cuál variante y cuántas unidades.
     const items = payload.items.map((item) => {
       const product = byId.get(item.productId);
       if (!product) {
@@ -91,10 +119,28 @@ export const PublicController = {
           { field: 'items', message: `Producto no disponible: ${item.productId}` }
         ]);
       }
+      const variants = product.variants ?? [];
+      const variant = item.variantId
+        ? variants.find((v) => v.id === item.variantId && v.active)
+        : null;
+      if (item.variantId && !variant) {
+        throw new HttpError(422, 'Opción no disponible', [
+          { field: 'items', message: `Esa opción de ${product.name} ya no está disponible` }
+        ]);
+      }
+      // Con opciones configuradas hay que elegir una: sin variante no sabríamos
+      // qué talla o aroma despachar.
+      if (!variant && variants.length > 0) {
+        throw new HttpError(422, 'Falta elegir una opción', [
+          { field: 'items', message: `Elige una opción de ${product.name}` }
+        ]);
+      }
       return {
         productId: product.id,
         productName: product.name,
-        unitPrice: discountedPrice(product.price, promotion),
+        variantId: variant?.id ?? null,
+        variantLabel: variant?.label ?? null,
+        unitPrice: discountedPrice(variant?.price ?? product.price, promotion),
         quantity: item.quantity
       };
     });

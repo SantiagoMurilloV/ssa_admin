@@ -16,7 +16,7 @@ const attachItems = async (orders) => {
   if (orders.length === 0) return orders;
   const ids = orders.map((o) => o.id);
   const { rows: items } = await query(
-    `SELECT id, order_id, product_id, product_name, unit_price, quantity
+    `SELECT id, order_id, product_id, product_name, unit_price, quantity, variant_id, variant_label
      FROM order_items WHERE order_id = ANY($1) ORDER BY id`,
     [ids]
   );
@@ -61,9 +61,18 @@ export const OrderModel = {
           const created = { ...rows[0], receiptToken };
           for (const item of items) {
             await client.query(
-              `INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity)
-               VALUES ($1, $2, $3, $4, $5)`,
-              [created.id, item.productId, item.productName, item.unitPrice, item.quantity]
+              `INSERT INTO order_items
+                 (order_id, product_id, product_name, unit_price, quantity, variant_id, variant_label)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [
+                created.id,
+                item.productId,
+                item.productName,
+                item.unitPrice,
+                item.quantity,
+                item.variantId ?? null,
+                item.variantLabel ?? null
+              ]
             );
           }
           // El inventario se retiene en la misma transacción que el pedido: si

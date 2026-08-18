@@ -25,6 +25,8 @@ export const createOrderSchema = z
         z
           .object({
             productId: z.string().trim().min(1).max(60),
+            // Cuál variante (talla/color/aroma). Ausente = producto sin opciones.
+            variantId: z.number().int().positive().optional(),
             quantity: z.number().int().min(1).max(10)
           })
           .strict()

@@ -29,6 +29,37 @@ export const productSchema = z
   })
   .strict();
 
+// Opciones de un producto: "Aroma" con sus valores, "Talla" con los suyos.
+export const productOptionsSchema = z
+  .object({
+    options: z
+      .array(
+        z
+          .object({
+            name: z.string().trim().min(1).max(40),
+            values: z.array(z.string().trim().min(1).max(60)).min(1).max(50)
+          })
+          .strict()
+      )
+      .max(3) // más de 3 ejes vuelve la grilla de variantes inmanejable
+  })
+  .strict();
+
+export const productVariantSchema = z
+  .object({
+    // {"Aroma":"Bombshell","Talla":"M"}
+    options: z.record(z.string().trim().max(40), z.string().trim().max(60)),
+    label: z.string().trim().max(120).default(''),
+    sku: z.string().trim().max(60).nullable().default(null),
+    // null = hereda el precio del producto (varios perfumes al mismo precio)
+    price: z.number().int().min(0).nullable().default(null),
+    // null = sin límite de unidades
+    stock: z.number().int().min(0).max(100000).nullable().default(null),
+    photoId: z.number().int().positive().nullable().default(null),
+    active: z.boolean().default(true)
+  })
+  .strict();
+
 export const orderStatusSchema = z
   .object({
     status: z.enum(['pending', 'paid', 'shipped', 'cancelled']),

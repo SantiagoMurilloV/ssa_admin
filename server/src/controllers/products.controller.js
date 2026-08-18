@@ -1,5 +1,9 @@
 import { ProductModel } from '../models/product.model.js';
-import { productSchema } from '../schemas/admin.schemas.js';
+import {
+  productSchema,
+  productOptionsSchema,
+  productVariantSchema
+} from '../schemas/admin.schemas.js';
 import { asyncHandler, HttpError, parseId } from '../middleware/errors.js';
 import {
   storageEnabled,
@@ -20,6 +24,15 @@ const slugify = (name) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60) || 'producto';
+
+// Una variante solo puede apuntar a una foto del mismo producto: con un id ajeno
+// la tienda mostraría la foto de otro producto al elegir la variante.
+const assertPhotoBelongs = async (product, photoId) => {
+  if (photoId === null || photoId === undefined) return;
+  if (!product.photos.some((photo) => photo.id === photoId)) {
+    throw new HttpError(422, 'La foto no pertenece a este producto');
+  }
+};
 
 export const ProductsController = {
   list: asyncHandler(async (req, res) => {
@@ -75,6 +88,73 @@ export const ProductsController = {
         )
       );
     }
+    res.json({ ok: true });
+  }),
+
+  // ── Opciones y variantes ──────────────────────────────────────────────────
+  setOptions: asyncHandler(async (req, res) => {
+    const { options } = productOptionsSchema.parse(req.body);
+    const product = await ProductModel.findById(req.params.id);
+    if (!product) throw new HttpError(404, 'Producto no encontrado');
+    // Dos opciones con el mismo nombre romperían la clave de la combinación
+    const names = options.map((o) => o.name.toLowerCase());
+    if (new Set(names).size !== names.length) {
+      throw new HttpError(422, 'No puede haber dos opciones con el mismo nombre');
+    }
+    const saved = await ProductModel.replaceOptions(product.id, options);
+    res.json({ options: saved });
+  }),
+
+  listVariants: asyncHandler(async (req, res) => {
+    const product = await ProductModel.findById(req.params.id);
+    if (!product) throw new HttpError(404, 'Producto no encontrado');
+    res.json({ variants: await ProductModel.listVariants(product.id) });
+  }),
+
+  addVariant: asyncHandler(async (req, res) => {
+    const payload = productVariantSchema.parse(req.body);
+    const product = await ProductModel.findById(req.params.id);
+    if (!product) throw new HttpError(404, 'Producto no encontrado');
+    await assertPhotoBelongs(product, payload.photoId);
+    try {
+      const variant = await ProductModel.addVariant(product.id, payload);
+      res.status(201).json({ variant });
+    } catch (error) {
+      // 23505 = índice único de la combinación
+      if (error.code === '23505') {
+        throw new HttpError(409, 'Ya existe una variante con esa combinación');
+      }
+      throw error;
+    }
+  }),
+
+  updateVariant: asyncHandler(async (req, res) => {
+    const payload = productVariantSchema.parse(req.body);
+    const product = await ProductModel.findById(req.params.id);
+    if (!product) throw new HttpError(404, 'Producto no encontrado');
+    await assertPhotoBelongs(product, payload.photoId);
+    try {
+      const variant = await ProductModel.updateVariant(
+        product.id,
+        parseId(req.params.variantId),
+        payload
+      );
+      if (!variant) throw new HttpError(404, 'Variante no encontrada');
+      res.json({ variant });
+    } catch (error) {
+      if (error.code === '23505') {
+        throw new HttpError(409, 'Ya existe una variante con esa combinación');
+      }
+      throw error;
+    }
+  }),
+
+  removeVariant: asyncHandler(async (req, res) => {
+    const removed = await ProductModel.removeVariant(
+      req.params.id,
+      parseId(req.params.variantId)
+    );
+    if (!removed) throw new HttpError(404, 'Variante no encontrada');
     res.json({ ok: true });
   }),
 

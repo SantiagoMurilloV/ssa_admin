@@ -77,7 +77,12 @@ before(async () => {
   // Esquema desde cero: así el test también comprueba que las migraciones
   // aplican en orden sobre una base vacía.
   await query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
-  for (const file of ['001_init.sql', '002_receipt_token.sql', '003_product_stock.sql']) {
+  for (const file of [
+    '001_init.sql',
+    '002_receipt_token.sql',
+    '003_product_stock.sql',
+    '004_product_variants.sql'
+  ]) {
     await query(await readFile(path.join(migrationsDir, file), 'utf8'));
   }
 });
@@ -188,4 +193,111 @@ test('la base rechaza stock negativo aunque se escriba a mano', { skip }, async 
   await reset();
   await makeProduct('limitado', 0);
   await assert.rejects(() => query('UPDATE products SET stock = -1 WHERE id = $1', ['limitado']));
+});
+
+// ── Variantes ───────────────────────────────────────────────────────────────
+// El inventario por variante es el punto del diseño: con stock a nivel producto
+// se podría despachar un aroma agotado porque "al producto le quedan unidades".
+
+const makeVariant = (productId, options, stock) =>
+  ProductModel.addVariant(productId, {
+    options,
+    label: Object.values(options).join(' · '),
+    stock
+  });
+
+const variantItem = (productId, variant, quantity) => [
+  {
+    productId,
+    variantId: variant.id,
+    productName: productId,
+    variantLabel: variant.label,
+    unitPrice: 1000,
+    quantity
+  }
+];
+
+test('comprar una variante no toca el stock de las otras', { skip }, async () => {
+  await reset();
+  await makeProduct('perfume', null);
+  const a = await makeVariant('perfume', { Aroma: 'Bombshell' }, 2);
+  const b = await makeVariant('perfume', { Aroma: 'Tease' }, 2);
+
+  await OrderModel.create(BASE_ORDER, variantItem('perfume', a, 1));
+
+  const after = await ProductModel.listVariants('perfume');
+  assert.equal(after.find((v) => v.id === a.id).stock, 1);
+  assert.equal(after.find((v) => v.id === b.id).stock, 2, 'la otra variante no se toca');
+});
+
+test('una variante agotada no se puede vender aunque otras tengan stock', { skip }, async () => {
+  await reset();
+  await makeProduct('perfume', null);
+  const agotada = await makeVariant('perfume', { Aroma: 'Tease' }, 0);
+  await makeVariant('perfume', { Aroma: 'Bombshell' }, 10);
+
+  await assert.rejects(
+    () => OrderModel.create(BASE_ORDER, variantItem('perfume', agotada, 1)),
+    (error) => {
+      assert.ok(error instanceof InsufficientStockError);
+      assert.equal(error.shortages[0].available, 0);
+      // el mensaje identifica la variante, no solo el producto
+      assert.match(error.shortages[0].productName, /Tease/);
+      return true;
+    }
+  );
+});
+
+test('cancelar devuelve las unidades a la variante correcta', { skip }, async () => {
+  await reset();
+  await makeProduct('perfume', null);
+  const a = await makeVariant('perfume', { Aroma: 'Bombshell' }, 1);
+  const b = await makeVariant('perfume', { Aroma: 'Tease' }, 1);
+  const order = await OrderModel.create(BASE_ORDER, variantItem('perfume', a, 1));
+
+  let now = await ProductModel.listVariants('perfume');
+  assert.equal(now.find((v) => v.id === a.id).stock, 0);
+
+  await OrderModel.updateStatus(order.id, { status: 'cancelled' });
+  now = await ProductModel.listVariants('perfume');
+  assert.equal(now.find((v) => v.id === a.id).stock, 1, 'vuelve a la que se vendió');
+  assert.equal(now.find((v) => v.id === b.id).stock, 1, 'la otra queda igual');
+});
+
+test('la carrera por la última unidad de una variante la gana uno solo', { skip }, async () => {
+  await reset();
+  await makeProduct('perfume', null);
+  const v = await makeVariant('perfume', { Aroma: 'Bombshell' }, 1);
+  const results = await Promise.allSettled([
+    OrderModel.create(BASE_ORDER, variantItem('perfume', v, 1)),
+    OrderModel.create(BASE_ORDER, variantItem('perfume', v, 1))
+  ]);
+  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+  const [after] = await ProductModel.listVariants('perfume');
+  assert.equal(after.stock, 0);
+});
+
+test('un producto sin variantes sigue descontando de products.stock', { skip }, async () => {
+  await reset();
+  await makeProduct('simple', 3);
+  await OrderModel.create(BASE_ORDER, item('simple', 2));
+  assert.equal(await stockOf('simple'), 1);
+});
+
+test('no puede haber dos variantes con la misma combinación', { skip }, async () => {
+  await reset();
+  await makeProduct('perfume', null);
+  await makeVariant('perfume', { Aroma: 'Tease' }, 1);
+  await assert.rejects(() => makeVariant('perfume', { Aroma: 'Tease' }, 5));
+});
+
+test('borrar el producto se lleva sus opciones y variantes', { skip }, async () => {
+  await reset();
+  await makeProduct('perfume', null);
+  await ProductModel.replaceOptions('perfume', [{ name: 'Aroma', values: ['Tease', 'Bombshell'] }]);
+  await makeVariant('perfume', { Aroma: 'Tease' }, 1);
+  await ProductModel.remove('perfume');
+  assert.equal((await ProductModel.listVariants('perfume')).length, 0);
+  const { rows } = await query('SELECT 1 FROM product_options WHERE product_id = $1', ['perfume']);
+  assert.equal(rows.length, 0);
 });

@@ -49,6 +49,12 @@ router.get('/products', ProductsController.list);
 router.post('/products', ProductsController.create);
 router.put('/products/:id', ProductsController.update);
 router.delete('/products/:id', ProductsController.remove);
+router.put('/products/:id/options', ProductsController.setOptions);
+router.get('/products/:id/variants', ProductsController.listVariants);
+router.post('/products/:id/variants', ProductsController.addVariant);
+router.put('/products/:id/variants/:variantId', ProductsController.updateVariant);
+router.delete('/products/:id/variants/:variantId', ProductsController.removeVariant);
+
 router.post('/products/:id/photos', uploadMediaFile, ProductsController.addPhoto);
 router.delete('/products/:id/photos/:photoId', ProductsController.removePhoto);
 
