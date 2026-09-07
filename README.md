@@ -64,7 +64,7 @@ Cookie `ssa_admin_token`, JWT de 12 h, `sameSite: none` + `secure` en producció
 | Método | Ruta |
 |---|---|
 | GET | `/stats/dashboard`, `/subscribers` |
-| GET / PATCH | `/orders`, `/orders/:id/status` |
+| GET / PATCH / DELETE | `/orders`, `/orders/:id/status`, `/orders/:id` |
 | GET POST PUT DELETE | `/products`, `/products/:id` |
 | POST / DELETE | `/products/:id/photos`, `/products/:id/photos/:photoId` |
 | GET / PUT | `/content` |
@@ -114,6 +114,11 @@ payment_status: awaiting_receipt ──► in_review ──► verified
 
 `cancelled` no toca `payment_status` ni `paid_at`: el pedido está muerto, no verificado.
 
+**Eliminar** (`DELETE /orders/:id`) es otra cosa: borra la fila y sus líneas y no se
+puede deshacer. Si el pedido estaba en `pending` o `paid` devuelve el inventario que
+retenía; si estaba en `shipped` o `cancelled` no lo toca (ya salió de la bodega, o ya
+se devolvió al cancelar). El comprobante se borra del storage.
+
 ### Inventario
 
 `products.stock` cuenta unidades. **`NULL` = sin límite** (preventa, o lo que se
@@ -134,6 +139,9 @@ que un pedido que nunca se paga retiene stock hasta que lo canceles.
   mueve inventario, y `SELECT ... FOR UPDATE` garantiza que cancelar dos veces no
   lo devuelva dos veces. Sacar un pedido de `cancelled` vuelve a retenerlo, y
   falla con 409 si en el entretanto se vendieron a otro.
+- **Eliminar** un pedido `pending` o `paid` también devuelve las unidades (con el
+  mismo row lock, así que cancelar y borrar a la vez no las duplica). Eliminar uno
+  `shipped` o `cancelled` no mueve inventario.
 - El `CHECK (stock IS NULL OR stock >= 0)` es la última línea: ni un `UPDATE` a
   mano puede dejar stock negativo.
 
@@ -145,7 +153,7 @@ La lógica vive en SQL, así que se prueba contra una base de verdad
 | Ruta | Contenido |
 |---|---|
 | `/` | KPIs de 7 días, embudo, gráfica de 14 días, ingresos del mes |
-| `/pedidos` | Filtros por estado, buscador, ver comprobante, confirmar pago, marcar enviado con guía |
+| `/pedidos` | Filtros por estado, buscador, ver comprobante, confirmar pago, marcar enviado con guía, cancelar y eliminar |
 | `/productos` | CRUD completo + galería de fotos/videos por producto |
 | `/contenido` | Textos de todas las secciones del sitio + orden y visibilidad + imágenes |
 | `/encargos` | Cotizaciones a pedido con foto, atajo a WhatsApp, y lista de suscriptores |

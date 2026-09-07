@@ -96,7 +96,7 @@ function ShipModal({ order, onConfirm, onClose }) {
   );
 }
 
-function OrderCard({ order, onVerify, onShip, onRevert, onCancel, onViewReceipt }) {
+function OrderCard({ order, onVerify, onShip, onRevert, onCancel, onRemove, onViewReceipt }) {
   return (
     <article className="row-card">
       <div className="row-main">
@@ -153,6 +153,9 @@ function OrderCard({ order, onVerify, onShip, onRevert, onCancel, onViewReceipt 
             Cancelar
           </button>
         )}
+        <button className="btn btn-danger btn-sm" onClick={() => onRemove(order)}>
+          Eliminar
+        </button>
       </div>
     </article>
   );
@@ -164,9 +167,11 @@ export default function OrdersPage() {
   const [receiptOrder, setReceiptOrder] = useState(null);
   const [shipOrder, setShipOrder] = useState(null);
   const [actionError, setActionError] = useState(null);
-  const { data, status, reload } = useApiResource(
+  // `key: filter` hace que cambiar de pestaña vuelva a pedir la lista; antes
+  // solo se cargaba una vez y la pestaña nueva mostraba los pedidos de la anterior.
+  const { data, status, error, reload } = useApiResource(
     () => ordersApi.list(filter === 'all' ? undefined : filter),
-    { pollMs: 15000 }
+    { pollMs: 15000, key: filter }
   );
 
   // Si falla, hay que decirlo: en silencio el admin creería que confirmó un
@@ -210,6 +215,33 @@ export default function OrdersPage() {
     }
   };
 
+  // Eliminar borra el pedido de verdad (cancelar lo conserva como historial).
+  // El mensaje dice qué pasa con el inventario según el estado, porque no es lo
+  // mismo borrar un pedido que aún retiene unidades que uno que ya se envió.
+  const remove = async (order) => {
+    const units = order.items.map((i) => `${i.quantity}× ${i.product_name}`).join(', ');
+    const stockNote =
+      order.status === 'shipped'
+        ? 'El pedido ya fue enviado, así que el inventario no cambia.'
+        : order.status === 'cancelled'
+          ? 'El inventario ya se devolvió al cancelarlo.'
+          : `Se devuelven al inventario: ${units}.`;
+    if (
+      !window.confirm(
+        `¿Eliminar ${order.reference} definitivamente? ${stockNote} Esta acción no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    try {
+      await ordersApi.remove(order.id);
+      reload({ silent: true });
+    } catch (err) {
+      setActionError(`No se pudo eliminar ${order.reference}: ${err.message}`);
+    }
+  };
+
   const ship = async (order, shipping) => {
     await ordersApi.updateStatus(order.id, { status: 'shipped', shipping });
     setShipOrder(null);
@@ -217,12 +249,13 @@ export default function OrdersPage() {
   };
 
   const counts = data?.counts ?? { pending: 0, paid: 0, shipped: 0, cancelled: 0 };
+  const total = counts.pending + counts.paid + counts.shipped + counts.cancelled;
   const filters = [
     ['pending', `Pendientes (${counts.pending})`],
     ['paid', `Pagados (${counts.paid})`],
     ['shipped', `Enviados (${counts.shipped})`],
     ['cancelled', `Cancelados (${counts.cancelled})`],
-    ['all', 'Todos']
+    ['all', `Todos (${total})`]
   ];
 
   const orders = (data?.orders ?? []).filter((order) => {
@@ -258,18 +291,24 @@ export default function OrdersPage() {
         <p className="form-error" style={{ marginBottom: 12 }}>{actionError}</p>
       )}
       {status === 'loading' && <p className="muted">Cargando pedidos…</p>}
+      {status === 'error' && (
+        <p className="form-error">No se pudieron cargar los pedidos: {error?.message}</p>
+      )}
       {status === 'ready' && orders.length === 0 && <p className="muted">No hay pedidos aquí.</p>}
-      {orders.map((order) => (
-        <OrderCard
-          key={order.id}
-          order={order}
-          onVerify={verify}
-          onShip={setShipOrder}
-          onRevert={revert}
-          onCancel={cancel}
-          onViewReceipt={setReceiptOrder}
-        />
-      ))}
+      {/* Mientras carga otra pestaña no se pintan los pedidos de la anterior */}
+      {status === 'ready' &&
+        orders.map((order) => (
+          <OrderCard
+            key={order.id}
+            order={order}
+            onVerify={verify}
+            onShip={setShipOrder}
+            onRevert={revert}
+            onCancel={cancel}
+            onRemove={remove}
+            onViewReceipt={setReceiptOrder}
+          />
+        ))}
 
       {receiptOrder && <ReceiptModal order={receiptOrder} onClose={() => setReceiptOrder(null)} />}
       {shipOrder && (

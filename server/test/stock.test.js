@@ -176,6 +176,36 @@ test('reactivar sin stock falla y el pedido sigue cancelado', { skip }, async ()
   assert.equal(await stockOf('limitado'), 0);
 });
 
+test('eliminar un pedido pendiente devuelve las unidades y borra sus líneas', { skip }, async () => {
+  await reset();
+  await makeProduct('limitado', 2);
+  const order = await OrderModel.create(BASE_ORDER, item('limitado', 1));
+  assert.equal(await stockOf('limitado'), 1);
+
+  const removed = await OrderModel.remove(order.id);
+  assert.equal(removed.reference, order.reference);
+  assert.equal(await stockOf('limitado'), 2);
+  assert.equal(await countOrders(), 0);
+  const { rows } = await query('SELECT 1 FROM order_items WHERE order_id = $1', [order.id]);
+  assert.equal(rows.length, 0, 'las líneas caen por ON DELETE CASCADE');
+});
+
+test('eliminar un pedido enviado o cancelado no toca el inventario', { skip }, async () => {
+  await reset();
+  await makeProduct('limitado', 3);
+  const shipped = await OrderModel.create(BASE_ORDER, item('limitado', 1));
+  await OrderModel.updateStatus(shipped.id, { status: 'shipped' });
+  const cancelled = await OrderModel.create(BASE_ORDER, item('limitado', 1));
+  await OrderModel.updateStatus(cancelled.id, { status: 'cancelled' });
+  assert.equal(await stockOf('limitado'), 2); // 3 − 1 enviado; el cancelado ya volvió
+
+  await OrderModel.remove(shipped.id);
+  assert.equal(await stockOf('limitado'), 2, 'lo enviado ya salió de la bodega');
+  await OrderModel.remove(cancelled.id);
+  assert.equal(await stockOf('limitado'), 2, 'lo cancelado ya se había devuelto');
+  assert.equal(await OrderModel.remove(cancelled.id), null, 'borrar dos veces devuelve null');
+});
+
 test('dos pedidos simultáneos por la última unidad: solo uno gana', { skip }, async () => {
   await reset();
   await makeProduct('limitado', 1);

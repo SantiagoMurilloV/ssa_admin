@@ -201,6 +201,38 @@ export const OrderModel = {
     }
   },
 
+  // Borrar es distinto de cancelar: la fila desaparece (y sus líneas, por
+  // ON DELETE CASCADE). Si el pedido aún retenía inventario (pending/paid) se
+  // devuelve; uno enviado ya salió de la bodega y uno cancelado ya lo devolvió,
+  // así que ahí el stock no se toca. FOR UPDATE serializa con updateStatus para
+  // que cancelar y borrar a la vez no devuelvan las unidades dos veces.
+  // Devuelve la fila borrada (el controlador necesita receipt_public_id).
+  async remove(id) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const before = await client.query('SELECT status FROM orders WHERE id = $1 FOR UPDATE', [id]);
+      if (before.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      if (['pending', 'paid'].includes(before.rows[0].status)) {
+        await ProductModel.releaseStockForOrder(client, id);
+      }
+      const { rows } = await client.query(
+        `DELETE FROM orders WHERE id = $1 RETURNING ${ORDER_FIELDS}`,
+        [id]
+      );
+      await client.query('COMMIT');
+      return rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   // Adjunta el comprobante solo si el pedido sigue esperándolo. La condición
   // va en el WHERE para que dos subidas simultáneas no dejen assets huérfanos:
   // la segunda no encuentra fila y su archivo se borra en el controlador.

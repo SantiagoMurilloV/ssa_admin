@@ -44,6 +44,7 @@ router.get('/subscribers', StatsController.subscribers);
 
 router.get('/orders', OrdersController.list);
 router.patch('/orders/:id/status', OrdersController.updateStatus);
+router.delete('/orders/:id', OrdersController.remove);
 
 router.get('/products', ProductsController.list);
 router.post('/products', ProductsController.create);

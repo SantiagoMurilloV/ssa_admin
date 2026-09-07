@@ -13,7 +13,8 @@ export const statsApi = {
 
 export const ordersApi = {
   list: (status) => http.get(status ? `/orders?status=${status}` : '/orders'),
-  updateStatus: (id, payload) => http.patch(`/orders/${id}/status`, payload)
+  updateStatus: (id, payload) => http.patch(`/orders/${id}/status`, payload),
+  remove: (id) => http.delete(`/orders/${id}`)
 };
 
 export const productsApi = {

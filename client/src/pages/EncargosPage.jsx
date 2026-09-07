@@ -14,7 +14,7 @@ export default function EncargosPage() {
   const [showSubscribers, setShowSubscribers] = useState(false);
   const { data, status, reload } = useApiResource(
     () => encargosApi.list(filter === 'all' ? undefined : filter),
-    { pollMs: 30000 }
+    { pollMs: 30000, key: filter }
   );
   const subscribers = useApiResource(() => statsApi.subscribers());
 
@@ -61,7 +61,7 @@ export default function EncargosPage() {
       {status === 'ready' && (data?.encargos ?? []).length === 0 && (
         <p className="muted">No hay encargos aquí.</p>
       )}
-      {(data?.encargos ?? []).map((encargo) => (
+      {status === 'ready' && (data?.encargos ?? []).map((encargo) => (
         <article className="row-card" key={encargo.id}>
           {encargo.photo_url && (
             <img

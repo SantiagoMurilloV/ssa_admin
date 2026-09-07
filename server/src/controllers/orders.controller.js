@@ -3,6 +3,7 @@ import { InsufficientStockError } from '../models/product.model.js';
 import { orderStatusSchema } from '../schemas/admin.schemas.js';
 import { sendPaymentConfirmed } from '../services/email.service.js';
 import { asyncHandler, HttpError, parseId } from '../middleware/errors.js';
+import { storageEnabled, deleteImage } from '../config/storage.js';
 
 export const OrdersController = {
   list: asyncHandler(async (req, res) => {
@@ -37,5 +38,16 @@ export const OrdersController = {
     if (payload.status === 'paid' && previousStatus !== 'paid') sendPaymentConfirmed(order);
 
     res.json({ order: clean });
+  }),
+
+  remove: asyncHandler(async (req, res) => {
+    const order = await OrderModel.remove(parseId(req.params.id));
+    if (!order) throw new HttpError(404, 'Pedido no encontrado');
+    // Sin pedido nadie va a volver a mirar el comprobante: se borra del storage
+    // para no acumular archivos huérfanos. Best-effort, como con las fotos.
+    if (storageEnabled && order.receipt_public_id) {
+      await deleteImage(order.receipt_public_id).catch(() => {});
+    }
+    res.json({ ok: true });
   })
 };
