@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { encargosApi, statsApi } from '../api/admin.api.js';
 import { useApiResource } from '../hooks/useApiResource.js';
 import { formatDate } from '../utils/format.js';
@@ -19,6 +20,21 @@ export default function EncargosPage() {
   const subscribers = useApiResource(() => statsApi.subscribers());
 
   const [actionError, setActionError] = useState(null);
+  const navigate = useNavigate();
+
+  // La cotización se convierte en un pedido con código y guía: el formulario
+  // de Pedidos se abre con el producto y el cliente ya escritos.
+  const createPedido = (encargo) =>
+    navigate('/pedidos', {
+      state: {
+        newPedido: {
+          brand: encargo.marca ?? '',
+          productRef: [encargo.producto, encargo.color, encargo.talla].filter(Boolean).join(' · '),
+          clientName: encargo.nombre,
+          clientPhone: encargo.contacto
+        }
+      }
+    });
 
   const advance = async (encargo) => {
     setActionError(null);
@@ -92,8 +108,11 @@ export default function EncargosPage() {
             >
               WhatsApp
             </a>
+            <button className="btn btn-dark btn-sm" onClick={() => createPedido(encargo)}>
+              Crear pedido
+            </button>
             {NEXT_STATUS[encargo.status] && (
-              <button className="btn btn-dark btn-sm" onClick={() => advance(encargo)}>
+              <button className="btn btn-ghost btn-sm" onClick={() => advance(encargo)}>
                 {NEXT_LABEL[encargo.status]}
               </button>
             )}

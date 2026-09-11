@@ -113,4 +113,35 @@ export async function seed() {
     }
     console.log('[seed] demo events created');
   }
+
+  // Encargos del panel de muestra, en distintas etapas de la guía, para poder
+  // probar el seguimiento público y la página de clientes sin cargar nada.
+  const { rows: [{ count: pedidoCount }] } = await query('SELECT COUNT(*)::int AS count FROM pedidos');
+  if (pedidoCount === 0) {
+    const { PedidoModel } = await import('../models/pedido.model.js');
+    const { ClientModel } = await import('../models/client.model.js');
+    const { TRACKING_STAGE_KEYS } = await import('../config/tracking-stages.js');
+    const demo = [
+      ['Valentina Ruiz', '300 555 0101', 'Armenia', 'Stanley', 'Quencher H2.0 40 oz · Rose Quartz', 219000, 110000, 'warehouse'],
+      ['Mateo Castaño', '311 555 0202', 'Pereira', 'Apple', 'AirPods Pro 2 (USB-C)', 949000, 949000, 'transit'],
+      ['Valentina Ruiz', '300 555 0101', 'Armenia', 'Sol de Janeiro', 'Bruma 62 · 240 ml', 168000, 168000, 'delivered'],
+      ['Juliana Ospina', '315 555 0303', 'Manizales', 'New Balance', 'Tenis 530 · talla 7.5 US · blanco/plata', 619000, 300000, 'usa']
+    ];
+    for (const [name, phone, city, brand, productRef, saleValue, paid, stage] of demo) {
+      const client = await ClientModel.upsertByPhone({ name, phone, city });
+      const pedido = await PedidoModel.create({
+        clientId: client.id,
+        brand,
+        productRef,
+        saleValue,
+        notes: null,
+        payment: paid > 0 ? { amount: paid, note: paid < saleValue ? 'Abono del 50 %' : 'Pago completo' } : null
+      });
+      // Recorre las etapas hasta la indicada para que el historial tenga fechas
+      for (const key of TRACKING_STAGE_KEYS.slice(1, TRACKING_STAGE_KEYS.indexOf(stage) + 1)) {
+        await PedidoModel.setTrackingStage(pedido.id, { stage: key });
+      }
+    }
+    console.log(`[seed] ${demo.length} demo pedidos created`);
+  }
 }

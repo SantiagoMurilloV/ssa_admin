@@ -63,3 +63,15 @@ export const eventSchema = z
     type: z.enum(['page_view', 'product_view', 'add_to_cart'])
   })
   .strict();
+
+// Suscripción push del comprador a la guía de UNA referencia
+export const trackingSubscribeSchema = z
+  .object({
+    endpoint: z.string().url().max(600),
+    keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(200) }).strict()
+  })
+  .strict();
+
+export const trackingUnsubscribeSchema = z
+  .object({ endpoint: z.string().url().max(600) })
+  .strict();

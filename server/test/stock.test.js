@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -77,12 +77,8 @@ before(async () => {
   // Esquema desde cero: así el test también comprueba que las migraciones
   // aplican en orden sobre una base vacía.
   await query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
-  for (const file of [
-    '001_init.sql',
-    '002_receipt_token.sql',
-    '003_product_stock.sql',
-    '004_product_variants.sql'
-  ]) {
+  const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
+  for (const file of files) {
     await query(await readFile(path.join(migrationsDir, file), 'utf8'));
   }
 });

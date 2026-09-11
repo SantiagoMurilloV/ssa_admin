@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { loginLimiter, publicLimiter, orderLimiter } from '../middleware/rate-limiters.js';
-import { uploadImageFile, uploadMediaFile } from '../middleware/upload.js';
+import { uploadImageFile, uploadMediaFile, uploadPedidoFiles } from '../middleware/upload.js';
 import { AuthController } from '../controllers/auth.controller.js';
 import { PublicController } from '../controllers/public.controller.js';
 import { ProductsController } from '../controllers/products.controller.js';
@@ -12,6 +12,9 @@ import { StatsController } from '../controllers/stats.controller.js';
 import { EncargosController } from '../controllers/encargos.controller.js';
 import { PromotionsController } from '../controllers/promotions.controller.js';
 import { PushController } from '../controllers/push.controller.js';
+import { PedidosController } from '../controllers/pedidos.controller.js';
+import { ClientsController } from '../controllers/clients.controller.js';
+import { TrackingController } from '../controllers/tracking.controller.js';
 
 export const router = Router();
 
@@ -29,6 +32,11 @@ router.post(
 );
 router.post('/public/encargos', orderLimiter, uploadImageFile, PublicController.createEncargo);
 router.post('/public/subscribe', publicLimiter, PublicController.subscribe);
+// Guía de seguimiento: cualquiera con el código ve la etapa; la suscripción
+// push es por referencia, no por navegador.
+router.get('/public/tracking/:reference', publicLimiter, TrackingController.lookup);
+router.post('/public/tracking/:reference/subscribe', publicLimiter, TrackingController.subscribe);
+router.delete('/public/tracking/:reference/subscribe', publicLimiter, TrackingController.unsubscribe);
 
 // ── Auth ──
 router.post('/auth/login', loginLimiter, AuthController.login);
@@ -44,6 +52,25 @@ router.get('/subscribers', StatsController.subscribers);
 
 router.get('/orders', OrdersController.list);
 router.patch('/orders/:id/status', OrdersController.updateStatus);
+router.patch('/orders/:id/tracking', OrdersController.updateTracking);
+
+// Encargos creados desde el panel (con cliente, abonos y guía)
+router.get('/pedidos', PedidosController.list);
+router.post('/pedidos', uploadPedidoFiles, PedidosController.create);
+router.put('/pedidos/:id', PedidosController.update);
+router.post('/pedidos/:id/photo', uploadImageFile, PedidosController.setPhoto);
+router.delete('/pedidos/:id/photo', PedidosController.removePhoto);
+router.post('/pedidos/:id/payments', uploadImageFile, PedidosController.addPayment);
+router.delete('/pedidos/:id/payments/:paymentId', PedidosController.removePayment);
+router.patch('/pedidos/:id/tracking', PedidosController.updateTracking);
+router.patch('/pedidos/:id/status', PedidosController.updateStatus);
+router.delete('/pedidos/:id', PedidosController.remove);
+
+router.get('/clients', ClientsController.list);
+router.post('/clients', ClientsController.create);
+router.get('/clients/:id', ClientsController.get);
+router.put('/clients/:id', ClientsController.update);
+router.delete('/clients/:id', ClientsController.remove);
 router.delete('/orders/:id', OrdersController.remove);
 
 router.get('/products', ProductsController.list);

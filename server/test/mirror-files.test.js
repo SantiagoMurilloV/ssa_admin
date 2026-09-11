@@ -92,3 +92,13 @@ test('el prefijo de referencia coincide con el que valida la tienda', { skip: !s
   assert.equal(pattern, String(ORDER_REFERENCE_PATTERN), 'el patrón de referencia difiere');
   assert.match(reference, new RegExp(pattern.slice(1, -1)));
 });
+
+test('las etapas de la guía son las mismas en la tienda', { skip: !storePresent }, async () => {
+  const [admin, store] = await readBoth(
+    'src/config/tracking-stages.js',
+    'server/src/config/tracking-stages.js'
+  );
+  // el encabezado apunta al otro repo en cada copia: se compara desde el export
+  const body = (source) => source.slice(source.indexOf('export const TRACKING_STAGES'));
+  assert.equal(body(admin), body(store), 'tracking-stages.js difiere entre ssa_admin y ssa_store');
+});

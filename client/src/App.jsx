@@ -10,6 +10,7 @@ import ProductsPage from './pages/ProductsPage.jsx';
 import ContentPage from './pages/ContentPage.jsx';
 import EncargosPage from './pages/EncargosPage.jsx';
 import ConfigPage from './pages/ConfigPage.jsx';
+import ClientsPage from './pages/ClientsPage.jsx';
 
 export default function App() {
   const { status } = useAuth();
@@ -38,6 +39,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/pedidos" element={<OrdersPage />} />
+        <Route path="/clientes" element={<ClientsPage />} />
         <Route path="/productos" element={<ProductsPage />} />
         <Route path="/contenido" element={<ContentPage />} />
         <Route path="/encargos" element={<EncargosPage />} />

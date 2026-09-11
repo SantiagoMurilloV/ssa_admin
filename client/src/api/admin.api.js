@@ -14,7 +14,30 @@ export const statsApi = {
 export const ordersApi = {
   list: (status) => http.get(status ? `/orders?status=${status}` : '/orders'),
   updateStatus: (id, payload) => http.patch(`/orders/${id}/status`, payload),
+  updateTracking: (id, payload) => http.patch(`/orders/${id}/tracking`, payload),
   remove: (id) => http.delete(`/orders/${id}`)
+};
+
+// Encargos creados desde el panel: cliente, abonos con desprendible y guía
+export const pedidosApi = {
+  list: (status) => http.get(status ? `/pedidos?status=${status}` : '/pedidos'),
+  create: (formData) => http.upload('/pedidos', formData),
+  update: (id, payload) => http.put(`/pedidos/${id}`, payload),
+  setPhoto: (id, formData) => http.upload(`/pedidos/${id}/photo`, formData),
+  removePhoto: (id) => http.delete(`/pedidos/${id}/photo`),
+  addPayment: (id, formData) => http.upload(`/pedidos/${id}/payments`, formData),
+  removePayment: (id, paymentId) => http.delete(`/pedidos/${id}/payments/${paymentId}`),
+  updateTracking: (id, payload) => http.patch(`/pedidos/${id}/tracking`, payload),
+  updateStatus: (id, status) => http.patch(`/pedidos/${id}/status`, { status }),
+  remove: (id) => http.delete(`/pedidos/${id}`)
+};
+
+export const clientsApi = {
+  list: (q) => http.get(q ? `/clients?q=${encodeURIComponent(q)}` : '/clients'),
+  get: (id) => http.get(`/clients/${id}`),
+  create: (client) => http.post('/clients', client),
+  update: (id, client) => http.put(`/clients/${id}`, client),
+  remove: (id) => http.delete(`/clients/${id}`)
 };
 
 export const productsApi = {

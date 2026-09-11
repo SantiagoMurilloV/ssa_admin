@@ -36,6 +36,7 @@ function NotificationsToggle() {
 const LINKS = [
   { to: '/', label: 'Inicio', end: true },
   { to: '/pedidos', label: 'Pedidos', badge: true },
+  { to: '/clientes', label: 'Clientes' },
   { to: '/productos', label: 'Productos' },
   { to: '/contenido', label: 'Contenido' },
   { to: '/encargos', label: 'Encargos' },

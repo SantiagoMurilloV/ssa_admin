@@ -1,7 +1,8 @@
 # SSA Import · Admin
 
 Panel de administración y **única fuente de verdad** de la tienda: catálogo,
-contenido del sitio, pedidos, canales de pago, envíos, promociones y encargos.
+contenido del sitio, pedidos, encargos con guía de seguimiento, clientes, canales
+de pago, envíos y promociones.
 
 La tienda nunca toca la base de datos: consume este API a través de sus funciones
 serverless.
@@ -53,6 +54,8 @@ Todos bajo `/api`.
 | POST | `/public/orders/:reference/receipt` | Sube la foto del comprobante (multipart, campo `image`) |
 | POST | `/public/encargos` | Encargo a pedido, con foto opcional |
 | POST | `/public/subscribe` | Alta en el newsletter |
+| GET | `/public/tracking/:reference` | Guía pública de un código `SSA-######` (encargo o pedido de la tienda): etapa, historial, producto y ciudad. Nada de teléfono, dirección ni montos |
+| POST / DELETE | `/public/tracking/:reference/subscribe` | Alta / baja de los avisos push de **esa** referencia (`{endpoint, keys}`) |
 
 ### Autenticación
 
@@ -64,7 +67,11 @@ Cookie `ssa_admin_token`, JWT de 12 h, `sameSite: none` + `secure` en producció
 | Método | Ruta |
 |---|---|
 | GET | `/stats/dashboard`, `/subscribers` |
-| GET / PATCH / DELETE | `/orders`, `/orders/:id/status`, `/orders/:id` |
+| GET / PATCH / DELETE | `/orders`, `/orders/:id/status`, `/orders/:id/tracking`, `/orders/:id` |
+| GET POST PUT DELETE | `/pedidos`, `/pedidos/:id` (crear es multipart: campos + `photo` + `receipt`) |
+| POST / DELETE | `/pedidos/:id/photo`, `/pedidos/:id/payments` (multipart `image`), `/pedidos/:id/payments/:paymentId` |
+| PATCH | `/pedidos/:id/tracking` (etapa de la guía) · `/pedidos/:id/status` (`open` / `cancelled`) |
+| GET POST PUT DELETE | `/clients`, `/clients/:id` (GET trae el historial: encargos + compras en tienda por teléfono) |
 | GET POST PUT DELETE | `/products`, `/products/:id` |
 | POST / DELETE | `/products/:id/photos`, `/products/:id/photos/:photoId` |
 | GET / PUT | `/content` |
@@ -76,8 +83,10 @@ Cookie `ssa_admin_token`, JWT de 12 h, `sameSite: none` + `secure` en producció
 
 ## Base de datos
 
-`admin_users`, `products`, `product_photos`, `orders`, `order_items`, `events`,
-`promotions`, `encargos`, `subscribers`, `push_subscriptions`, `settings`.
+`admin_users`, `products`, `product_photos`, `product_options`, `product_variants`,
+`orders`, `order_items`, `events`, `promotions`, `encargos`, `subscribers`,
+`push_subscriptions`, `settings`, `clients`, `pedidos`, `pedido_payments`,
+`tracking_subscriptions`.
 
 Las migraciones viven en `server/src/db/migrations/*.sql` y se aplican en orden
 alfabético dentro de una transacción, registrándose en `schema_migrations`.
@@ -119,6 +128,36 @@ puede deshacer. Si el pedido estaba en `pending` o `paid` devuelve el inventario
 retenía; si estaba en `shipped` o `cancelled` no lo toca (ya salió de la bodega, o ya
 se devolvió al cancelar). El comprobante se borra del storage.
 
+### Encargos con guía (`pedidos`) y clientes
+
+Además de los pedidos que nacen en el checkout (`orders`), el admin crea a mano
+los **encargos** que acuerda por WhatsApp: marca, referencia, foto, cliente,
+fecha, valor de venta y lo que el cliente ya abonó con su desprendible. Cada uno
+recibe una referencia `SSA-######` del **mismo espacio que los pedidos de la
+tienda** (`OrderModel.create` y `PedidoModel.create` comprueban la otra tabla
+antes de insertar), así que la guía pública busca el código en ambas.
+
+- Los abonos viven en `pedido_payments` (uno por pago, con desprendible). Lo
+  pagado es la suma; `balance = sale_value - paid`.
+- Cada encargo cae en exactamente una pestaña, derivada en SQL (`bucket`):
+  `cancelled` → `delivered` (etapa final) → `paid` (sin saldo) → `pending`.
+- `clients.phone_digits` (solo dígitos, sin el 57) es UNIQUE: crear un encargo
+  con un teléfono ya registrado reutiliza a esa persona. El historial del cliente
+  cruza también los pedidos de la tienda por ese mismo número.
+- Un cliente con encargos no se puede borrar (FK `RESTRICT` → 409).
+
+### Guía de seguimiento
+
+`tracking_stage` recorre `usa → transit → colombia → warehouse → dispatched →
+delivered` (definidas en `src/config/tracking-stages.js`, espejo en la tienda).
+Cada cambio real de etapa agrega `{stage, at, note}` a `tracking_history`
+(JSONB) y manda un push a las suscripciones de **esa referencia**
+(`tracking_subscriptions`, distintas de las del admin). Marcar un pedido de la
+tienda como `shipped` avanza su guía a `dispatched` si iba antes.
+
+Las notificaciones al comprador usan las mismas llaves VAPID que las del panel:
+sin `VAPID_*` la guía funciona igual pero la tienda no ofrece avisos.
+
 ### Inventario
 
 `products.stock` cuenta unidades. **`NULL` = sin límite** (preventa, o lo que se
@@ -153,10 +192,11 @@ La lógica vive en SQL, así que se prueba contra una base de verdad
 | Ruta | Contenido |
 |---|---|
 | `/` | KPIs de 7 días, embudo, gráfica de 14 días, ingresos del mes |
-| `/pedidos` | Filtros por estado, buscador, ver comprobante, confirmar pago, marcar enviado con guía, cancelar y eliminar |
+| `/pedidos` | Dos vistas: **Encargos** (crear con cliente, foto, valor y abono inicial; registrar abonos; cambiar la etapa de la guía; compartir el enlace por WhatsApp) y **Tienda** (los del checkout: comprobante, confirmar pago, marcar enviado, y la misma guía) |
+| `/clientes` | Agenda de clientes con buscador, totales (encargos, tienda, comprado, saldo) e historial de compras |
 | `/productos` | CRUD completo + galería de fotos/videos por producto |
 | `/contenido` | Textos de todas las secciones del sitio + orden y visibilidad + imágenes |
-| `/encargos` | Cotizaciones a pedido con foto, atajo a WhatsApp, y lista de suscriptores |
+| `/encargos` | Cotizaciones que llegan del formulario público, atajo a WhatsApp, botón **Crear pedido** que abre el formulario de encargo prellenado, y lista de suscriptores |
 | `/configuracion` | Canales de pago (transferencia), tarifas de envío, promociones |
 
 ## Deploy
@@ -179,23 +219,25 @@ Deben mantenerse sincronizados a mano con el repo de la tienda
 | `server/src/config/default-site-content.js` | `server/src/config/default-site-content.js` |
 | `server/src/schemas/public.schemas.js` (createOrderSchema) | `server/src/schemas/order.schema.js` |
 | `server/src/config/shipping-config.js` (resolveShippingFee) | `client/src/utils/shipping.js` |
+| `server/src/config/tracking-stages.js` | `server/src/config/tracking-stages.js` |
 
 ## Tests
 
 ```bash
-npm test            # 40 tests, sin base de datos
+npm test            # 52 tests, sin base de datos
 ```
 
 Cubren la regla de envíos, los canales de pago, el merge de contenido, el schema
-del pedido y que los archivos espejo no se desincronicen.
+del pedido, las etapas de la guía, la normalización de teléfonos y códigos, y
+que los archivos espejo no se desincronicen.
 
-Los 9 tests de inventario necesitan Postgres y **borran productos y pedidos**, así
-que se omiten salvo que los apuntes a propósito a una base desechable:
+Los tests de inventario y de encargos necesitan Postgres y **recrean el esquema**,
+así que se omiten salvo que los apuntes a propósito a una base desechable:
 
 ```bash
 createdb ssa_stock_test
-STOCK_TEST_DATABASE_URL=postgres://localhost:5432/ssa_stock_test npm test   # 49
+STOCK_TEST_DATABASE_URL=postgres://localhost:5432/ssa_stock_test npm test   # 76
 ```
 
-Recrean el esquema desde las migraciones, así que también comprueban que
-`001 → 002 → 003` aplican en orden sobre una base vacía.
+Aplican todas las migraciones en orden sobre una base vacía. Los dos archivos
+comparten la base, por eso `npm test` corre con `--test-concurrency=1`.

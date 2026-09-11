@@ -126,3 +126,89 @@ export const pushSubscriptionSchema = z
     keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(200) }).strict()
   })
   .strict();
+
+// ── Clientes y encargos del panel ─────────────────────────────────────────────
+import { TRACKING_STAGE_KEYS } from '../config/tracking-stages.js';
+
+const dateString = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida: usa AAAA-MM-DD');
+
+// Los montos llegan como texto cuando el formulario es multipart (trae la foto
+// y el desprendible) y como número cuando es JSON: coerce acepta ambos.
+const money = z.coerce.number().int('Debe ser un entero en pesos').min(0).max(1_000_000_000);
+
+export const clientSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Escribe el nombre del cliente').max(120),
+    phone: z.string().trim().min(7, 'Teléfono muy corto').max(40),
+    email: z.string().trim().email('Correo inválido').max(160).optional(),
+    city: z.string().trim().max(80).optional(),
+    department: z.string().trim().max(80).optional(),
+    address: z.string().trim().max(200).optional(),
+    notes: z.string().trim().max(1000).optional()
+  })
+  .strict();
+
+// Crear un encargo: el cliente puede ser uno existente (clientId) o uno nuevo
+// escrito ahí mismo (clientName + clientPhone); si el teléfono ya es de
+// alguien, se reutiliza esa persona. El abono inicial es opcional.
+export const createPedidoSchema = z
+  .object({
+    clientId: z.coerce.number().int().positive().optional(),
+    clientName: z.string().trim().min(2).max(120).optional(),
+    clientPhone: z.string().trim().min(7, 'Teléfono muy corto').max(40).optional(),
+    clientEmail: z.string().trim().email('Correo inválido').max(160).optional(),
+    clientCity: z.string().trim().max(80).optional(),
+    brand: z.string().trim().max(80).default(''),
+    productRef: z.string().trim().min(2, 'Escribe la referencia del producto').max(300),
+    orderedAt: dateString.optional(),
+    saleValue: money,
+    notes: z.string().trim().max(1000).optional(),
+    paidAmount: money.optional(),
+    paidAt: dateString.optional(),
+    paymentNote: z.string().trim().max(300).optional()
+  })
+  .strict()
+  .refine((data) => data.clientId || (data.clientName && data.clientPhone), {
+    message: 'Falta el cliente: elige uno existente o escribe nombre y teléfono',
+    path: ['clientName']
+  })
+  .refine((data) => data.paidAmount === undefined || data.paidAmount <= data.saleValue, {
+    message: 'El abono no puede ser mayor que el valor de la venta',
+    path: ['paidAmount']
+  });
+
+export const updatePedidoSchema = z
+  .object({
+    clientId: z.coerce.number().int().positive().optional(),
+    brand: z.string().trim().max(80).default(''),
+    productRef: z.string().trim().min(2).max(300),
+    orderedAt: dateString.optional(),
+    saleValue: money,
+    notes: z.string().trim().max(1000).optional()
+  })
+  .strict();
+
+export const pedidoPaymentSchema = z
+  .object({
+    amount: z.coerce.number().int('Debe ser un entero en pesos').positive('El abono debe ser mayor a cero').max(1_000_000_000),
+    paidAt: dateString.optional(),
+    note: z.string().trim().max(300).optional()
+  })
+  .strict();
+
+export const pedidoStatusSchema = z.object({ status: z.enum(['open', 'cancelled']) }).strict();
+
+// Etapa de la guía (encargos y pedidos de la tienda). Los datos de la
+// transportadora acompañan normalmente a 'dispatched', pero se aceptan siempre.
+export const trackingStageSchema = z
+  .object({
+    stage: z.enum(TRACKING_STAGE_KEYS),
+    note: z.string().trim().max(300).optional(),
+    carrier: z.string().trim().max(80).optional(),
+    trackingNumber: z.string().trim().max(80).optional(),
+    trackingUrl: z.string().trim().url('Link inválido').max(300).optional()
+  })
+  .strict();

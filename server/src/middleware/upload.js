@@ -23,5 +23,11 @@ const mediaUpload = multer({
 });
 
 export const uploadImageFile = imageUpload.single('image');
+// Crear un encargo trae dos imágenes distintas de una vez: la foto del
+// producto y el desprendible del abono inicial. Ambas opcionales.
+export const uploadPedidoFiles = imageUpload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'receipt', maxCount: 1 }
+]);
 export const uploadMediaFile = mediaUpload.single('image');
 export const isVideoMime = (mimetype) => VIDEO_TYPES.has(mimetype);

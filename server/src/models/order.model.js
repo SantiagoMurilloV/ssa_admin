@@ -9,6 +9,7 @@ const ORDER_FIELDS = `
   payment_method, payment_channel, payment_status, quantity, subtotal, shipping_fee, total,
   status, receipt_url, receipt_public_id,
   shipping_type, tracking_carrier, tracking_number, tracking_url,
+  tracking_stage, tracking_history,
   paid_at, created_at
 `;
 
@@ -34,6 +35,10 @@ export const OrderModel = {
         const receiptToken = generateReceiptToken();
         await client.query('BEGIN');
         try {
+          // La guía pública busca la referencia en orders y en pedidos: si ya
+          // la tiene un encargo, se reintenta con otra (mismo camino que 23505).
+          const taken = await client.query('SELECT 1 FROM pedidos WHERE reference = $1', [reference]);
+          if (taken.rowCount > 0) throw Object.assign(new Error('reference taken'), { code: '23505' });
           const { rows } = await client.query(
             `INSERT INTO orders (
                reference, customer_name, phone, email, department, city, address, notes,
@@ -138,12 +143,16 @@ export const OrderModel = {
       await client.query('BEGIN');
       // FOR UPDATE serializa dos cambios de estado sobre el mismo pedido: sin
       // esto, cancelar dos veces devolvería el inventario dos veces.
-      const before = await client.query('SELECT status FROM orders WHERE id = $1 FOR UPDATE', [id]);
+      const before = await client.query(
+        'SELECT status, tracking_stage FROM orders WHERE id = $1 FOR UPDATE',
+        [id]
+      );
       if (before.rowCount === 0) {
         await client.query('ROLLBACK');
         return null;
       }
       const previous = before.rows[0].status;
+      const previousTrackingStage = before.rows[0].tracking_stage;
 
       // Solo el cruce de la frontera 'cancelled' mueve inventario, y solo una vez
       if (status === 'cancelled' && previous !== 'cancelled') {
@@ -176,7 +185,20 @@ export const OrderModel = {
            shipping_type = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($3, shipping_type) END,
            tracking_carrier = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($4, tracking_carrier) END,
            tracking_number = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($5, tracking_number) END,
-           tracking_url = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($6, tracking_url) END
+           tracking_url = CASE WHEN $2 = 'pending' THEN NULL ELSE COALESCE($6, tracking_url) END,
+           -- Marcar enviado es despacharlo al cliente: la guía pública avanza a
+           -- 'dispatched' si aún iba antes (nunca retrocede un 'delivered').
+           tracking_stage = CASE
+             WHEN $2 = 'shipped' AND tracking_stage IN ('usa', 'transit', 'colombia', 'warehouse')
+               THEN 'dispatched'
+             ELSE tracking_stage
+           END,
+           tracking_history = CASE
+             WHEN $2 = 'shipped' AND tracking_stage IN ('usa', 'transit', 'colombia', 'warehouse')
+               THEN tracking_history || jsonb_build_array(
+                      jsonb_build_object('stage', 'dispatched', 'at', now(), 'note', NULL))
+             ELSE tracking_history
+           END
          WHERE id = $1
          RETURNING ${ORDER_FIELDS}`,
         [
@@ -192,7 +214,7 @@ export const OrderModel = {
       const [withItems] = await attachItems([rows[0]]);
       // El estado anterior no se persiste: lo necesita el controlador para no
       // reenviar el correo de "pago confirmado" si ya estaba en paid.
-      return { ...withItems, previousStatus: previous };
+      return { ...withItems, previousStatus: previous, previousTrackingStage };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
@@ -223,6 +245,9 @@ export const OrderModel = {
         `DELETE FROM orders WHERE id = $1 RETURNING ${ORDER_FIELDS}`,
         [id]
       );
+      await client.query('DELETE FROM tracking_subscriptions WHERE reference = $1', [
+        rows[0].reference
+      ]);
       await client.query('COMMIT');
       return rows[0];
     } catch (error) {
@@ -231,6 +256,29 @@ export const OrderModel = {
     } finally {
       client.release();
     }
+  },
+
+  // Cambia la etapa de la guía pública. El historial solo crece si la etapa
+  // cambió de verdad, y la CTE devuelve la anterior para avisar al cliente
+  // únicamente cuando hay novedad.
+  async setTrackingStage(id, { stage, note }) {
+    const row = await queryOne(
+      `WITH before AS (SELECT tracking_stage AS previous_stage FROM orders WHERE id = $1)
+       UPDATE orders o SET
+         tracking_history = CASE
+           WHEN o.tracking_stage = $2 THEN o.tracking_history
+           ELSE o.tracking_history || jsonb_build_array(
+                  jsonb_build_object('stage', $2::text, 'at', now(), 'note', $3::text))
+         END,
+         tracking_stage = $2
+       FROM before
+       WHERE o.id = $1
+       RETURNING o.id, before.previous_stage`,
+      [id, stage, note ?? null]
+    );
+    if (!row) return null;
+    const order = await this.findById(row.id);
+    return { ...order, previousTrackingStage: row.previous_stage };
   },
 
   // Adjunta el comprobante solo si el pedido sigue esperándolo. La condición

@@ -1,6 +1,7 @@
 import { OrderModel } from '../models/order.model.js';
 import { InsufficientStockError } from '../models/product.model.js';
-import { orderStatusSchema } from '../schemas/admin.schemas.js';
+import { orderStatusSchema, trackingStageSchema } from '../schemas/admin.schemas.js';
+import { notifyTrackingStage } from '../services/push.service.js';
 import { sendPaymentConfirmed } from '../services/email.service.js';
 import { asyncHandler, HttpError, parseId } from '../middleware/errors.js';
 import { storageEnabled, deleteImage } from '../config/storage.js';
@@ -34,9 +35,23 @@ export const OrdersController = {
     // "Pago confirmado, tu pedido está en proceso". Solo al entrar a paid: si el
     // admin lo devuelve a pendiente y lo vuelve a confirmar, no se duplica el
     // correo. Fire-and-forget para no dejar colgado el panel si Resend tarda.
-    const { previousStatus, ...clean } = order;
+    const { previousStatus, previousTrackingStage, ...clean } = order;
     if (payload.status === 'paid' && previousStatus !== 'paid') sendPaymentConfirmed(order);
+    // Marcar enviado avanza la guía a 'dispatched': quien siga el código se entera
+    if (previousTrackingStage !== clean.tracking_stage) {
+      notifyTrackingStage(clean.reference, clean.tracking_stage);
+    }
 
+    res.json({ order: clean });
+  }),
+
+  // Etapa de la guía pública del pedido de la tienda (EE. UU. → bodega → cliente)
+  updateTracking: asyncHandler(async (req, res) => {
+    const payload = trackingStageSchema.parse(req.body);
+    const order = await OrderModel.setTrackingStage(parseId(req.params.id), payload);
+    if (!order) throw new HttpError(404, 'Pedido no encontrado');
+    const { previousTrackingStage, ...clean } = order;
+    if (previousTrackingStage !== payload.stage) notifyTrackingStage(clean.reference, payload.stage);
     res.json({ order: clean });
   }),
 

@@ -2,13 +2,15 @@
   "name": "ssa-admin-server",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20.9" },
+  "engines": {
+    "node": ">=20.9"
+  },
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env src/index.js",
     "start": "node --env-file-if-exists=.env src/index.js",
     "migrate": "node --env-file-if-exists=.env -e \"import('./src/db/migrate.js').then(m => m.migrate()).then(() => process.exit(0))\"",
     "seed": "node --env-file-if-exists=.env -e \"import('./src/db/seed.js').then(m => m.seed()).then(() => process.exit(0))\"",
-    "test": "node --test"
+    "test": "node --test --test-concurrency=1"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
