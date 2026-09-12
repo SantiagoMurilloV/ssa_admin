@@ -179,3 +179,38 @@ test('un cliente con encargos no se puede borrar; sin ellos sí', { skip }, asyn
   assert.equal(orders[0].items[0].name, 'Termo');
   assert.equal(laura.orders_count, 1);
 });
+
+test('el dashboard suma los encargos: ventas, abonos del mes y saldo por cobrar', { skip }, async () => {
+  const { StatsModel } = await import('../src/models/stats.model.js');
+  const before = await StatsModel.finance();
+
+  const client = await ClientModel.upsertByPhone({ name: 'Finanzas Test', phone: '317 000 0001' });
+  const pedido = await PedidoModel.create({
+    clientId: client.id,
+    brand: 'Dyson',
+    productRef: 'Airwrap',
+    saleValue: 1_000_000,
+    payment: { amount: 400_000 }
+  });
+  const after = await StatsModel.finance();
+  assert.equal(after.month.encargos.sales - before.month.encargos.sales, 1_000_000, 'la venta cuenta en el mes');
+  assert.equal(after.month.encargos.collected - before.month.encargos.collected, 400_000, 'el abono entra como ingreso');
+  assert.equal(after.month.income - before.month.income, 400_000, 'el ingreso total suma tienda + abonos');
+  assert.equal(after.receivable.balance - before.receivable.balance, 600_000, 'lo que falta queda por cobrar');
+  assert.equal(after.receivable.count - before.receivable.count, 1);
+
+  await PedidoModel.addPayment(pedido.id, { amount: 600_000 });
+  const paid = await StatsModel.finance();
+  assert.equal(paid.receivable.balance, before.receivable.balance, 'pagado completo ya no se cobra');
+  assert.equal(paid.month.encargos.collected - before.month.encargos.collected, 1_000_000);
+
+  // Cancelar saca el encargo de ventas, abonos y saldo
+  await PedidoModel.setStatus(pedido.id, 'cancelled');
+  const cancelled = await StatsModel.finance();
+  assert.equal(cancelled.month.encargos.sales, before.month.encargos.sales);
+  assert.equal(cancelled.month.encargos.collected, before.month.encargos.collected);
+  assert.equal(cancelled.month.income, before.month.income);
+
+  const counts = await StatsModel.pedidoCounts();
+  assert.equal(counts.cancelled >= 1, true);
+});

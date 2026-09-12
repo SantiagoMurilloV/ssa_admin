@@ -145,6 +145,11 @@ antes de insertar), así que la guía pública busca el código en ambas.
   con un teléfono ya registrado reutiliza a esa persona. El historial del cliente
   cruza también los pedidos de la tienda por ese mismo número.
 - Un cliente con encargos no se puede borrar (FK `RESTRICT` → 409).
+- En el dashboard (`StatsModel.finance`) los encargos suman: **ingresos del mes**
+  = pedidos pagados/enviados de la tienda + abonos registrados en el mes
+  (`pedido_payments.paid_at`); **ventas de encargos** = `sale_value` de los
+  encargos con `ordered_at` en el mes; **por cobrar** = saldo de todos los
+  encargos abiertos, sin importar el mes. Los cancelados no cuentan.
 
 ### Guía de seguimiento
 
@@ -191,7 +196,7 @@ La lógica vive en SQL, así que se prueba contra una base de verdad
 
 | Ruta | Contenido |
 |---|---|
-| `/` | KPIs de 7 días, embudo, gráfica de 14 días, ingresos del mes |
+| `/` | KPIs de 7 días, embudo y gráfica de 14 días de la tienda; dinero del mes sumando tienda + abonos de encargos, ventas de encargos, saldo por cobrar y encargos por estado |
 | `/pedidos` | Dos vistas: **Encargos** (crear con cliente, foto, valor y abono inicial; registrar abonos; cambiar la etapa de la guía; compartir el enlace por WhatsApp) y **Tienda** (los del checkout: comprobante, confirmar pago, marcar enviado, y la misma guía) |
 | `/clientes` | Agenda de clientes con buscador, totales (encargos, tienda, comprado, saldo) e historial de compras |
 | `/productos` | CRUD completo + galería de fotos/videos por producto |
