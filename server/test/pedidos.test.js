@@ -196,6 +196,8 @@ test('el dashboard suma los encargos: ventas, abonos del mes y saldo por cobrar'
   assert.equal(after.month.encargos.sales - before.month.encargos.sales, 1_000_000, 'la venta cuenta en el mes');
   assert.equal(after.month.encargos.collected - before.month.encargos.collected, 400_000, 'el abono entra como ingreso');
   assert.equal(after.month.income - before.month.income, 400_000, 'el ingreso total suma tienda + abonos');
+  assert.equal(after.total.income - before.total.income, 400_000, 'el histórico también suma el abono');
+  assert.equal(after.total.encargos.sales - before.total.encargos.sales, 1_000_000, 'la venta cuenta en el histórico');
   assert.equal(after.receivable.balance - before.receivable.balance, 600_000, 'lo que falta queda por cobrar');
   assert.equal(after.receivable.count - before.receivable.count, 1);
 
@@ -210,7 +212,42 @@ test('el dashboard suma los encargos: ventas, abonos del mes y saldo por cobrar'
   assert.equal(cancelled.month.encargos.sales, before.month.encargos.sales);
   assert.equal(cancelled.month.encargos.collected, before.month.encargos.collected);
   assert.equal(cancelled.month.income, before.month.income);
+  assert.equal(cancelled.total.income, before.total.income, 'cancelar también sale del histórico');
 
   const counts = await StatsModel.pedidoCounts();
   assert.equal(counts.cancelled >= 1, true);
+});
+
+test('el dashboard puede mirar otro mes y el histórico no cambia', { skip }, async () => {
+  const { StatsModel } = await import('../src/models/stats.model.js');
+  const client = await ClientModel.upsertByPhone({ name: 'Meses Test', phone: '317 000 0002' });
+  const pedido = await PedidoModel.create({
+    clientId: client.id,
+    brand: 'Apple',
+    productRef: 'AirPods',
+    orderedAt: '2024-03-10',
+    saleValue: 500_000,
+    payment: { amount: 200_000, paidAt: '2024-03-12' }
+  });
+  await PedidoModel.addPayment(pedido.id, { amount: 100_000, paidAt: '2024-04-02' });
+
+  const march = await StatsModel.finance('2024-03');
+  assert.equal(march.month.key, '2024-03');
+  assert.equal(march.month.encargos.sales, 500_000, 'la venta cae en marzo por ordered_at');
+  assert.equal(march.month.encargos.collected, 200_000, 'solo el abono de marzo');
+  assert.equal(march.month.first <= '2024-03', true, 'el primer mes llega al menos hasta marzo 2024');
+
+  const april = await StatsModel.finance('2024-04');
+  assert.equal(april.month.encargos.sales, 0);
+  assert.equal(april.month.encargos.collected, 100_000, 'el abono de abril cae en abril');
+
+  const current = await StatsModel.finance();
+  assert.equal(current.month.key, current.month.current, 'sin mes se usa el mes en curso');
+  assert.equal(current.total.income, march.total.income, 'el histórico no depende del mes elegido');
+  assert.equal(current.total.encargos.collected >= 300_000, true);
+
+  const invalid = await StatsModel.finance('2024-13');
+  assert.equal(invalid.month.key, current.month.key, 'un mes inválido cae al mes en curso');
+
+  await PedidoModel.setStatus(pedido.id, 'cancelled');
 });

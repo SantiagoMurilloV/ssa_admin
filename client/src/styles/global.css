@@ -623,6 +623,15 @@ textarea { resize: vertical; min-height: 70px; }
 .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(42, 42, 53, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.85); }
 .kpi-accent { background: linear-gradient(135deg, rgba(150, 138, 190, 0.22), rgba(255, 255, 255, 0.6) 70%); }
 .kpi .kpi-value.money-balance { color: #b0755a; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.panel-head h2 { margin: 0; }
+.month-picker { display: inline-flex; align-items: center; gap: 4px; }
+.month-picker select { border: 1px solid var(--card-border); border-radius: 10px; padding: 6px 10px; font-size: 13px; background: var(--card); color: inherit; }
+.month-picker-arrow { border: 1px solid var(--card-border); background: var(--card); border-radius: 10px; width: 30px; height: 30px; font-size: 18px; line-height: 1; cursor: pointer; color: inherit; }
+.month-picker-arrow:disabled { opacity: 0.35; cursor: default; }
+.is-loading { opacity: 0.55; transition: opacity 0.2s ease; }
+.money-group-title { font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-45); font-weight: 500; margin: 14px 0 10px; }
+.money-group-title:first-child { margin-top: 0; }
 .money-rows-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; }
 .money-rows-label { color: var(--ink-60); }
 .money-rows-hint { color: var(--ink-45); font-size: 12px; }

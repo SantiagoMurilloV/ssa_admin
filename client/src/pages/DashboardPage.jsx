@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { statsApi } from '../api/admin.api.js';
 import { useApiResource } from '../hooks/useApiResource.js';
@@ -58,15 +59,70 @@ function MoneyRows({ rows }) {
   );
 }
 
+// 'AAAA-MM' -> 'septiembre 2026'
+const monthLabel = (key) => {
+  if (!key) return '';
+  const [year, month] = key.split('-').map(Number);
+  const text = new Date(year, month - 1, 1).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
+
+// Meses entre el primero con movimiento y el actual, del más reciente al más viejo
+const monthKeys = (first, current) => {
+  if (!first || !current) return current ? [current] : [];
+  const keys = [];
+  let [y, m] = current.split('-').map(Number);
+  const [fy, fm] = first.split('-').map(Number);
+  while (y > fy || (y === fy && m >= fm)) {
+    keys.push(`${y}-${String(m).padStart(2, '0')}`);
+    m -= 1;
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+    if (keys.length > 240) break;
+  }
+  return keys;
+};
+
+// Flechas y lista para moverse entre meses en el panel de dinero
+function MonthPicker({ value, first, current, onChange }) {
+  const keys = monthKeys(first, current);
+  if (!keys.includes(value)) keys.push(value);
+  const index = keys.indexOf(value);
+  const newer = index > 0 ? keys[index - 1] : null;
+  const older = index < keys.length - 1 ? keys[index + 1] : null;
+  return (
+    <div className="month-picker">
+      <button type="button" className="month-picker-arrow" aria-label="Mes anterior" disabled={!older} onClick={() => onChange(older)}>
+        ‹
+      </button>
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Mes">
+        {keys.map((key) => (
+          <option key={key} value={key}>
+            {monthLabel(key)}
+            {key === current ? ' · actual' : ''}
+          </option>
+        ))}
+      </select>
+      <button type="button" className="month-picker-arrow" aria-label="Mes siguiente" disabled={!newer} onClick={() => onChange(newer)}>
+        ›
+      </button>
+    </div>
+  );
+}
+
 // Los encargos entran al dashboard financiero: lo vendido y lo abonado en el
 // mes se suman a los ingresos de la tienda, y lo que falta por pagar aparece
 // como saldo por cobrar. Los valores nuevos tienen fallback porque el panel y
 // el API se despliegan por separado.
 export default function DashboardPage() {
-  const { data, status } = useApiResource(() => statsApi.dashboard(), { pollMs: 60000 });
+  // null = mes en curso (lo decide el API en hora de Colombia)
+  const [monthKey, setMonthKey] = useState(null);
+  const { data, status } = useApiResource(() => statsApi.dashboard(monthKey), { pollMs: 60000, key: monthKey });
 
-  if (status === 'loading') return <p className="muted">Cargando panel…</p>;
-  if (status === 'error' || !data) return <p className="form-error">No se pudo cargar el panel.</p>;
+  if (status === 'error') return <p className="form-error">No se pudo cargar el panel.</p>;
+  if (!data) return <p className="muted">Cargando panel…</p>;
 
   const maxViews = Math.max(1, ...data.series.map((d) => d.views));
   const conversion =
@@ -77,9 +133,15 @@ export default function DashboardPage() {
   const month = data.month;
   const encargos = month.encargos ?? { count: 0, sales: 0, collected: 0, payments: 0, delivered: 0 };
   const income = month.income ?? month.revenue;
+  // Histórico acumulado (tienda + abonos desde el primer registro)
+  const total = data.total ?? { income, store: { revenue: month.revenue }, encargos };
   const receivable = data.receivable ?? { count: 0, balance: 0 };
   const pedidos = data.pedidos ?? { pending: 0, paid: 0, delivered: 0, cancelled: 0 };
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const selectedMonth = month.key ?? monthKey;
+  const isCurrentMonth = !month.current || selectedMonth === month.current;
+  const monthName = isCurrentMonth ? 'del mes' : `de ${monthLabel(selectedMonth).toLowerCase()}`;
+  const loadingMonth = status === 'loading';
 
   return (
     <>
@@ -99,14 +161,21 @@ export default function DashboardPage() {
           <div className="kpi-hint">{plural(pedidos.pending, 'encargo con saldo', 'encargos con saldo')}</div>
         </Link>
         <div className="kpi kpi-accent">
-          <div className="kpi-label">Ingresos del mes</div>
+          <div className="kpi-label">Ingresos históricos</div>
+          <div className="kpi-value">{formatCOP(total.income)}</div>
+          <div className="kpi-hint">
+            Tienda {formatCOP(total.store.revenue)} · Encargos {formatCOP(total.encargos.collected)}
+          </div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label">Ingresos {monthName}</div>
           <div className="kpi-value">{formatCOP(income)}</div>
           <div className="kpi-hint">
             Tienda {formatCOP(month.revenue)} · Encargos {formatCOP(encargos.collected)}
           </div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Encargos del mes</div>
+          <div className="kpi-label">Encargos {monthName}</div>
           <div className="kpi-value">{formatCOP(encargos.sales)}</div>
           <div className="kpi-hint">
             {plural(encargos.count, 'encargo', 'encargos')} · {encargos.delivered} entregados
@@ -127,10 +196,17 @@ export default function DashboardPage() {
 
       <div className="panel-grid two">
         <section className="panel">
-          <h2>Dinero del mes</h2>
+          <div className="panel-head">
+            <h2>Dinero</h2>
+            {month.current && (
+              <MonthPicker value={selectedMonth} first={month.first} current={month.current} onChange={setMonthKey} />
+            )}
+          </div>
+          <div className={loadingMonth ? 'is-loading' : ''}>
+          <h3 className="money-group-title">{isCurrentMonth ? 'Este mes' : monthLabel(selectedMonth)}</h3>
           <MoneyRows
             rows={[
-              { label: 'Ingresos totales', hint: 'tienda + abonos', value: income, accent: 'total' },
+              { label: `Ingresos ${monthName}`, hint: 'tienda + abonos', value: income, accent: 'total' },
               {
                 label: 'Tienda · pedidos pagados',
                 hint: `${plural(month.orders, 'pedido', 'pedidos')} · ${plural(month.units, 'unidad', 'unidades')}`,
@@ -148,18 +224,37 @@ export default function DashboardPage() {
                 hint: plural(encargos.payments, 'abono', 'abonos'),
                 value: encargos.collected,
                 accent: 'store'
+              }
+            ]}
+          />
+          <h3 className="money-group-title">Histórico</h3>
+          <MoneyRows
+            rows={[
+              {
+                label: 'Ingresos recibidos',
+                hint: `tienda ${formatCOP(total.store.revenue)} + ${plural(total.encargos.payments ?? 0, 'abono', 'abonos')}`,
+                value: total.income,
+                accent: 'total'
               },
               {
-                label: 'Por cobrar (acumulado)',
-                hint: plural(receivable.count, 'encargo', 'encargos'),
+                label: 'Encargos · ventas registradas',
+                hint: plural(total.encargos.count ?? 0, 'encargo', 'encargos'),
+                value: total.encargos.sales,
+                accent: 'sales'
+              },
+              {
+                label: 'Por cobrar',
+                hint: plural(receivable.count, 'encargo con saldo', 'encargos con saldo'),
                 value: receivable.balance,
                 accent: 'receivable'
               }
             ]}
           />
+          </div>
           <p className="muted" style={{ marginTop: 12 }}>
-            La tienda cobra completo al confirmar el pago; los encargos entran por abonos. El saldo por cobrar
-            es lo que falta de todos los encargos abiertos.
+            La tienda cobra completo al confirmar el pago; los encargos entran por abonos según la fecha de
+            cada abono. El histórico suma todo desde el primer registro; el saldo por cobrar es lo que falta
+            de todos los encargos abiertos.
           </p>
         </section>
         <section className="panel">

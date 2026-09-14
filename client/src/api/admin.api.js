@@ -7,7 +7,8 @@ export const authApi = {
 };
 
 export const statsApi = {
-  dashboard: () => http.get('/stats/dashboard'),
+  // `month` es 'AAAA-MM'; sin él el API responde con el mes en curso
+  dashboard: (month) => http.get(month ? `/stats/dashboard?month=${month}` : '/stats/dashboard'),
   subscribers: () => http.get('/subscribers')
 };
 

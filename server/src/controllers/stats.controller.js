@@ -1,7 +1,7 @@
 import { query, queryOne } from '../db/pool.js';
 import { eventSchema } from '../schemas/public.schemas.js';
 import { asyncHandler } from '../middleware/errors.js';
-import { StatsModel } from '../models/stats.model.js';
+import { StatsModel, isMonthKey } from '../models/stats.model.js';
 
 export const StatsController = {
   recordEvent: asyncHandler(async (req, res) => {
@@ -11,6 +11,8 @@ export const StatsController = {
   }),
 
   dashboard: asyncHandler(async (req, res) => {
+    // ?month=AAAA-MM cambia el mes del panel de dinero; sin él, el mes en curso
+    const monthKey = isMonthKey(req.query.month) ? req.query.month : null;
     const [funnelRows, seriesRows, orderCounts, finance, pedidoCounts, subscribers] = await Promise.all([
       query(
         `SELECT type, COUNT(*)::int AS count FROM events
@@ -38,7 +40,7 @@ export const StatsController = {
       ),
       query('SELECT status, COUNT(*)::int AS count FROM orders GROUP BY status'),
       // Dinero del mes: tienda + encargos (ventas, abonos, por cobrar)
-      StatsModel.finance(),
+      StatsModel.finance(monthKey),
       StatsModel.pedidoCounts(),
       queryOne('SELECT COUNT(*)::int AS count FROM subscribers')
     ]);
@@ -60,12 +62,17 @@ export const StatsController = {
       pedidos: pedidoCounts,
       // revenue/orders/units se conservan (tienda) y se suman income y encargos
       month: {
+        key: finance.month.key,
+        current: finance.month.current,
+        first: finance.month.first,
         revenue: finance.month.store.revenue,
         orders: finance.month.store.orders,
         units: finance.month.store.units,
         income: finance.month.income,
         encargos: finance.month.encargos
       },
+      // Acumulado histórico (tienda + abonos), sin filtro de mes
+      total: finance.total,
       receivable: finance.receivable,
       subscribers: subscribers.count
     });
